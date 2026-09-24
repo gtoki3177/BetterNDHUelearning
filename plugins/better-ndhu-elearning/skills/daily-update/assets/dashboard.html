@@ -1,0 +1,1372 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>BetterElearning</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Orbitron:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* ============================================================
+   深色為主 (dark-first)。bare :root = 深色; 淺色在兩個區塊裡覆寫。
+   ============================================================ */
+:root{
+  color-scheme:dark;
+  --ground:#0D0F11;
+  --ground-2:#121518;
+  --surface:#171A1D;
+  --surface-2:#1E2226;
+  --ink:#E9ECEA;
+  --ink-2:#B4BBB6;
+  --muted:#7C858A;
+  --line:#2A3036;
+  --line-soft:#22272C;
+  --accent:#F2C94C;          /* 「現在 / 可操作」 專用的黃 */
+  --accent-ink:#141414;
+  --accent-soft:rgba(242,201,76,.14);
+  --urgent:#E8674A;
+  --urgent-soft:rgba(232,103,74,.16);
+  --soon:#E39B3A;
+  --soon-soft:rgba(227,155,58,.16);
+  --calm:#8FB0CF;
+  --calm-soft:rgba(143,176,207,.14);
+  --flash:#F6F4EC;
+  --outline-ink:#FFFFFF;
+  --spec:rgba(255,255,255,.028);
+  --grid:rgba(255,255,255,.035);
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 26px -16px rgba(0,0,0,.8);
+
+  --f-display:"Bricolage Grotesque","Noto Sans TC",system-ui,sans-serif;
+  --f-body:"Public Sans","Noto Sans TC",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono","Noto Sans TC",ui-monospace,monospace;
+
+  --sp:clamp(14px,2.6vw,24px);
+  --cut:10px;
+  --radius:6px;
+}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    color-scheme:light;
+    --ground:#E9EAE6; --ground-2:#E1E3DE; --surface:#F6F6F3; --surface-2:#ECEDE9;
+    --ink:#15181A; --ink-2:#3E4548; --muted:#6E7679; --line:#CDD1CC; --line-soft:#DADDD8;
+    --accent:#9C740B; --accent-ink:#FFFFFF; --accent-soft:rgba(156,116,11,.14);
+    --urgent:#B8412A; --urgent-soft:rgba(184,65,42,.14);
+    --soon:#A5620F; --soon-soft:rgba(165,98,15,.14);
+    --calm:#3F6A8E; --calm-soft:rgba(63,106,142,.14);
+    --flash:#15181A; --outline-ink:#15181A; --spec:rgba(0,0,0,.02); --grid:rgba(0,0,0,.05);
+    --shadow:0 1px 2px rgba(20,28,25,.08), 0 10px 26px -16px rgba(20,28,25,.35);
+  }
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --ground:#E9EAE6; --ground-2:#E1E3DE; --surface:#F6F6F3; --surface-2:#ECEDE9;
+  --ink:#15181A; --ink-2:#3E4548; --muted:#6E7679; --line:#CDD1CC; --line-soft:#DADDD8;
+  --accent:#9C740B; --accent-ink:#FFFFFF; --accent-soft:rgba(156,116,11,.14);
+  --urgent:#B8412A; --urgent-soft:rgba(184,65,42,.14);
+  --soon:#A5620F; --soon-soft:rgba(165,98,15,.14);
+  --calm:#3F6A8E; --calm-soft:rgba(63,106,142,.14);
+  --flash:#15181A; --outline-ink:#15181A; --spec:rgba(0,0,0,.02); --grid:rgba(0,0,0,.05);
+  --shadow:0 1px 2px rgba(20,28,25,.08), 0 10px 26px -16px rgba(20,28,25,.35);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{
+  margin:0;
+  background:
+    radial-gradient(circle at 1px 1px, var(--grid) 1px, transparent 1.4px) 0 0/22px 22px,
+    linear-gradient(180deg,var(--ground-2),var(--ground) 40%);
+  background-color:var(--ground);
+  color:var(--ink);
+  font-family:var(--f-body);
+  font-size:14.5px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+a{color:inherit}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.015em}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- 全頁骨架：一個螢幕, 不捲頁 ---------- */
+.app{height:100%;display:flex;flex-direction:column;gap:12px;
+  padding:clamp(12px,2vw,20px) var(--sp);max-width:1240px;margin:0 auto}
+.stage{position:relative;flex:1 1 auto;min-height:0}
+.view{position:absolute;inset:0;overflow:hidden;
+  display:flex;flex-direction:column;gap:12px;padding:2px 2px 6px;
+  opacity:0;transform:translateX(14px);visibility:hidden;pointer-events:none;
+  transition:opacity .22s ease, transform .28s cubic-bezier(.2,.7,.2,1), visibility 0s linear .28s}
+.view.on{opacity:1;transform:none;visibility:visible;pointer-events:auto;transition-delay:0s}
+
+/* ---------- 全像面板 (chamfer + 微傾斜) ---------- */
+.holo{
+  position:relative;
+  background:linear-gradient(160deg, color-mix(in srgb, var(--surface) 92%, var(--accent) 8%) 0%, var(--surface) 22%);
+  border:1px solid var(--line);
+  padding:14px 16px 16px;
+  display:flex;flex-direction:column;gap:12px;
+  transform:perspective(1100px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+  transform-style:preserve-3d;
+  transition:transform .42s cubic-bezier(.2,.7,.2,1);
+  will-change:transform;
+}
+.holo::before{ /* 右上角的小刻度 */
+  content:"";position:absolute;top:8px;right:8px;width:7px;height:7px;
+  border-top:1px solid var(--accent);border-right:1px solid var(--accent);opacity:.75;pointer-events:none}
+.holo::after{ /* 跟著滑鼠的反光 */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(300px circle at var(--mx,50%) var(--my,50%), var(--spec), transparent 60%);
+  opacity:0;transition:opacity .3s}
+.holo:hover::after{opacity:1}
+.ph{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ph h2{font-size:17px;font-weight:600}
+.ph .eyebrow{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.ph p{margin:0;font-size:12.5px;color:var(--muted)}
+.ph .spacer{flex:1}
+.holo.grow{flex:1 1 auto;min-height:0}
+.scroll{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;
+  padding:2px 6px 14px 2px;margin:-2px -6px -2px -2px;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;
+  --ft:0px; --fb:0px;
+  mask-image:linear-gradient(to bottom,transparent 0,#000 var(--ft),#000 calc(100% - var(--fb)),transparent 100%)}
+.scroll[data-top="1"]{--ft:14px}
+.scroll[data-bottom="1"]{--fb:18px}
+.scroll::-webkit-scrollbar{width:6px}
+.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.scroll > * + *{margin-top:10px}
+
+/* ---------- 頂列：標題 + 分頁 ---------- */
+.mast{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);padding-bottom:10px}
+.mast h1{font-size:clamp(22px,3.2vw,30px);font-weight:700;letter-spacing:-.01em;line-height:1}
+.mast h1.brand{margin:0;line-height:0;flex:none}
+.brand svg{display:block;height:clamp(36px,4.6vw,46px);width:auto;overflow:visible}
+.brand .l1{fill:var(--accent)}
+.brand path{shape-rendering:geometricPrecision}
+.brand .l2{fill:var(--outline-ink)}
+.term{font-family:var(--f-mono);font-size:12px;color:var(--accent);
+  border:1px solid var(--accent);padding:2px 8px;}
+.mast .spacer{flex:1 1 20px}
+.stamp{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);text-align:right;line-height:1.35}
+
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{appearance:none;font:inherit;font-size:13px;font-weight:600;letter-spacing:.02em;
+  color:var(--ink-2);background:var(--surface);border:1px solid var(--line);
+  padding:7px 14px 7px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;
+  
+  transition:background .18s, color .18s, border-color .18s, transform .18s}
+.tab b{font-family:var(--f-mono);font-weight:500;font-size:11.5px;color:var(--muted)}
+.tab:hover{border-color:var(--accent);color:var(--ink);transform:translateY(-1px)}
+.tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tab.on b{color:var(--accent-ink);opacity:.75}
+
+/* ---------- 狀態列 ---------- */
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:0;
+  background:var(--line-soft);border:1px solid var(--line);
+  }
+.strip div{position:relative;overflow:hidden;background:var(--surface);padding:12px 16px 13px;min-width:0}
+.strip dt{position:relative;z-index:1;font-size:13px;font-weight:600;color:var(--ink);margin:0 0 3px;white-space:nowrap}
+.strip dd{position:relative;z-index:1;margin:0;font-family:var(--f-mono);font-size:24px;font-weight:500;color:var(--ink);line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip dd small{font-family:var(--f-body);font-size:11.5px;color:var(--muted);letter-spacing:0}
+.strip div[data-tone]{background:var(--tone-soft)}
+.strip div[data-tone] dd{color:var(--tone)}
+@media (max-width:760px){ .strip{grid-template-columns:repeat(2,minmax(0,1fr))} }
+/* 狀態列背景: 把數值本身用黃色整體輪廓大字再寫一次 (跟任務 / 信箱卡片同一套) */
+.strip .wm{position:absolute;right:10px;top:50%;transform:translateY(-50%);z-index:0;pointer-events:none;user-select:none;
+  font-family:var(--f-display);font-weight:700;font-size:74px;line-height:1;letter-spacing:.02em;white-space:nowrap;
+  color:var(--accent);filter:url(#ol);opacity:.28;
+  -webkit-mask-image:linear-gradient(128deg,#000 30%,rgba(0,0,0,.72) 62%,rgba(0,0,0,.34) 100%);
+          mask-image:linear-gradient(128deg,#000 30%,rgba(0,0,0,.72) 62%,rgba(0,0,0,.34) 100%)}
+
+/* ---------- 進場 / 懸停 / 呼吸 ---------- */
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.rise{animation:rise .32s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i,0) * 32ms)}
+.lift{transition:transform .16s ease, border-color .16s ease, background .16s ease}
+.lift:hover{transform:translateY(-1px)}
+@keyframes breathe{0%,100%{box-shadow:inset 3px 0 0 var(--tone)}50%{box-shadow:inset 3px 0 0 var(--tone), 0 0 0 1px var(--tone-soft), 0 0 18px -6px var(--tone)}}
+.due[data-urgent="1"]{animation:breathe 2.6s ease-in-out infinite}
+
+/* ---------- 期限帶 ---------- */
+.band-body{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
+@media (min-width:760px){
+  /* 日曆跨過標題列, 在整張任務卡片裡上下置中 */
+  #band{display:grid;grid-template-columns:minmax(0,1fr) 268px;grid-template-rows:auto 1fr;column-gap:12px;row-gap:12px}
+  #band > .ph{grid-column:1;grid-row:1}
+  #band .band-body{display:contents}
+  #band .due-list{grid-column:1;grid-row:2;align-self:start}
+  #band .tl{grid-column:2;grid-row:1 / span 2;align-self:center}
+  #band::before{display:none}
+}
+.band-empty{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);
+  border:1px dashed var(--line);padding:9px 14px;
+  }
+.band-empty b{color:var(--accent);font-weight:600}
+.band-empty i{width:7px;height:7px;background:var(--accent);transform:rotate(45deg)}
+
+/* ---------- 14 天時間軸 ---------- */
+.tl{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;align-self:start;
+  background:var(--ground-2);border:1px solid var(--line-soft);padding:8px}
+.tl .wh{font-size:10.5px;color:var(--muted);text-align:center;padding:0 0 3px;letter-spacing:.02em}
+.tl .wh.wk{opacity:.55}
+.tl .c{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:34px;min-width:0}
+.tl .dn{font-family:var(--f-mono);font-size:14px;line-height:1;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.tl .dots{display:flex;gap:2px;height:6px}
+.tl .dots i{width:6px;height:6px;border-radius:50%;background:var(--tone,var(--calm))}
+.tl .c.wk .dn{opacity:.55}
+.tl .c.past .dn{opacity:.28}
+.tl .has{background:var(--surface-2)}
+.tl .has .dn{color:var(--tone,var(--ink));font-weight:500;opacity:1}
+.tl .today{background:var(--accent-soft);box-shadow:inset 0 2px 0 var(--accent)}
+.tl .today .dn{color:var(--accent);font-weight:600;opacity:1}
+
+/* ---------- 作業列 ---------- */
+.due-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.due{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;gap:2px 12px;align-items:start;
+  background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--radius);
+  padding:10px 12px 11px;text-decoration:none;box-shadow:inset 3px 0 0 var(--tone,var(--calm));height:100%}
+.due:hover{border-color:var(--tone,var(--accent))}
+.due .cd{grid-row:1 / span 2;display:flex;flex-direction:column;align-items:center;min-width:44px;padding-top:1px}
+.due .cd b{font-family:var(--f-mono);font-size:26px;line-height:1;font-variant-numeric:tabular-nums;color:var(--tone,var(--ink))}
+.due .cd i{font-style:normal;font-size:10.5px;color:var(--muted);margin-top:2px}
+.due .what{display:block;font-family:var(--f-display);font-size:14.5px;font-weight:600;line-height:1.3;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.due .meta{display:block;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.due .meta b{font-family:var(--f-mono);font-weight:400;color:var(--ink-2)}
+.due .state{grid-column:2;justify-self:start;font-size:10.5px;padding:1px 8px;border-radius:100px;white-space:nowrap;
+  background:var(--tone-soft,var(--calm-soft));color:var(--tone,var(--calm));margin-top:3px}
+.quiet{font-size:13px;color:var(--muted);font-style:italic}
+
+/* ---------- 信件列 ---------- */
+.mails{display:grid;grid-template-columns:1fr;gap:6px;margin:0;padding:0;list-style:none}
+@media (min-width:900px){ .mails{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.mail{display:grid;grid-template-columns:52px minmax(0,1fr);gap:1px 12px;align-items:baseline;
+  background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--radius);
+  padding:8px 12px;text-decoration:none;box-shadow:inset 3px 0 0 var(--tone,transparent)}
+.mail:hover{border-color:var(--tone,var(--accent))}
+.mail .ago{font-family:var(--f-mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.mail .who{font-size:11.5px;color:var(--muted);grid-column:2}
+.mail .subj{font-size:13.5px;line-height:1.38;grid-column:2;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mail .tags{grid-column:2;display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.tag{font-size:10.5px;letter-spacing:.02em;padding:1px 7px;border-radius:100px;background:var(--soon-soft);color:var(--soon)}
+.tag.att{background:var(--calm-soft);color:var(--calm)}
+.tag.t-urgent{background:var(--urgent-soft);color:var(--urgent)}
+.fold{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s cubic-bezier(.2,.7,.2,1)}
+.fold[data-open="1"]{grid-template-rows:1fr}
+.fold > div{overflow:hidden;min-height:0}
+.fold .mails, .fold .bulk-list{padding-top:6px}
+.more{appearance:none;font:inherit;font-size:12.5px;color:var(--ink-2);background:var(--surface-2);
+  border:1px solid var(--line);padding:5px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  
+  transition:border-color .16s, color .16s}
+.more:hover{border-color:var(--accent);color:var(--accent)}
+.more svg{width:11px;height:11px;transition:transform .28s cubic-bezier(.2,.7,.2,1)}
+.more[aria-expanded="true"] svg{transform:rotate(180deg)}
+.mail-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bulk-list{display:flex;flex-direction:column;gap:5px;margin:0;padding:0;list-style:none}
+.bulk-list li{display:flex;gap:10px;align-items:baseline;font-size:13px;min-width:0}
+.bulk-list .ago{font-family:var(--f-mono);font-size:11px;color:var(--muted);flex:0 0 46px}
+.bulk-list a{overflow-wrap:anywhere;text-decoration:none}
+.bulk-list a:hover{color:var(--accent);text-decoration:underline}
+.mail-foot{margin:0;font-size:11.5px;color:var(--muted)}
+
+/* ---------- 課程 ---------- */
+.courses{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin:0;padding:0;list-style:none}
+.course{padding:13px 15px 14px;gap:9px}
+.course header{display:flex;flex-direction:column;gap:2px;padding-right:14px}
+.course .code{font-family:var(--f-mono);font-size:10.5px;color:var(--accent);letter-spacing:.1em}
+.course h3{font-size:15.5px;font-weight:600;line-height:1.3}
+.course h3 a{text-decoration:none}
+.course h3 a:hover{color:var(--accent)}
+.course .dept{font-size:11px;color:var(--muted)}
+.items{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none;border-top:1px dashed var(--line);padding-top:9px}
+.items li{display:flex;gap:8px;align-items:baseline;font-size:13px;min-width:0}
+.items .kind{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);flex:0 0 46px;padding-top:1px}
+.items a{overflow-wrap:anywhere;text-decoration:none}
+.items a:hover{color:var(--accent);text-decoration:underline}
+.items .k-assign{color:var(--urgent)}
+.items .k-resource{color:var(--calm)}
+.course .quiet{border-top:1px dashed var(--line);padding-top:9px}
+
+/* ---------- 教材 ---------- */
+.panel > p{margin:0;color:var(--ink-2);font-size:14px;max-width:64ch}
+.idx{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);margin:0;padding:0;list-style:none}
+.idx li{background:var(--surface-2);padding:10px 13px;display:flex;flex-direction:column;gap:1px}
+.idx .who{font-size:13px;font-weight:600}
+.idx .what{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.ask{margin:0;font-size:13.5px;color:var(--ink-2);background:var(--accent-soft);padding:10px 13px;border-left:2px solid var(--accent)}
+.ask b{color:var(--accent);font-weight:600}
+.skipped{margin:0;font-size:12.5px;color:var(--muted);max-width:72ch}
+pre{margin:0;background:var(--ground-2);border:1px solid var(--line-soft);padding:10px 12px;overflow-x:auto;
+  font-family:var(--f-mono);font-size:12.5px;line-height:1.7;color:var(--ink-2)}
+pre b{color:var(--accent);font-weight:500}
+code{font-family:var(--f-mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border:1px solid var(--line-soft)}
+
+/* ---------- 系統 ---------- */
+.notes{display:flex;flex-direction:column;gap:10px}
+.notes p{margin:0;font-size:13px;color:var(--ink-2);max-width:76ch}
+.notes .err{color:var(--urgent)}
+
+@media (prefers-reduced-motion:reduce){
+  .rise{animation:none}
+  .due[data-urgent="1"]{animation:none;box-shadow:inset 3px 0 0 var(--tone)}
+  .lift, .fold, .holo, .view, .tab{transition:none}
+  .holo{transform:none}
+}
+@media (pointer:coarse){ .holo{transform:none} .holo::after{display:none} }
+@media (max-width:760px){
+  body{overflow:auto} html,body{height:auto} .app{height:auto;min-height:100%}
+  .stage{min-height:60vh} .view{position:relative;inset:auto;overflow:visible;display:none}
+  .view.on{display:flex} .scroll{overflow:visible;mask-image:none;margin:0;padding:0} .holo.grow{flex:none}
+}
+
+/* ---------- hover 閃切高亮 ----------
+   三層色塊 (黃 → 白 → 黃) 各差 25ms 從左掃過, 被最上層完全蓋住的瞬間卡片切成反白。
+   用 transition (不是 keyframes), 所以滑鼠移開會原路倒放: 最上層先退、延遲順序也反過來。 */
+@property --p{syntax:'<number>';inherits:false;initial-value:0}
+.hl{position:relative;overflow:hidden;isolation:isolate;
+  --sw-in:170ms; --sw-out:120ms;
+  transition:background-color 0s var(--sw-out), border-color 0s var(--sw-out), box-shadow 0s var(--sw-out), transform .16s ease}
+.fx{position:absolute;inset:0;z-index:3;pointer-events:none}
+.fx i{position:absolute;inset:0;--p:0;
+  clip-path:inset(0 calc(max(0, 1 - var(--p) / .35) * 100%) 0 calc(max(0, (var(--p) - .65) / .35) * 100%));
+  transition:--p .24s cubic-bezier(.76,0,.24,1)}
+.fx i:nth-child(1){background:var(--accent);transition-delay:50ms}
+.fx i:nth-child(2){background:var(--flash);transition-delay:25ms}
+.fx i:nth-child(3){background:var(--accent);transition-delay:0ms}
+.hl:is(:hover,:focus-visible) .fx i{--p:1}
+.hl:is(:hover,:focus-visible) .fx i:nth-child(1){transition-delay:0ms}
+.hl:is(:hover,:focus-visible) .fx i:nth-child(2){transition-delay:25ms}
+.hl:is(:hover,:focus-visible) .fx i:nth-child(3){transition-delay:50ms}
+
+.hl:is(:hover,:focus-visible){background:var(--accent);border-color:var(--accent);box-shadow:none;animation:none;
+  transition:background-color 0s var(--sw-in), border-color 0s var(--sw-in), box-shadow 0s var(--sw-in), transform .16s ease}
+.hl :is(.ago,.who,.subj,.what,.meta,.meta b,.cd b,.cd i,.tag,.state){
+  transition:color 0s var(--sw-out), background-color 0s var(--sw-out), opacity 0s var(--sw-out)}
+.hl:is(:hover,:focus-visible) :is(.ago,.who,.subj,.what,.meta,.meta b,.cd b,.cd i){color:var(--accent-ink);
+  transition:color 0s var(--sw-in), opacity 0s var(--sw-in)}
+.hl:is(:hover,:focus-visible) :is(.tag,.state){color:var(--accent-ink);background:rgba(0,0,0,.16);
+  transition:color 0s var(--sw-in), background-color 0s var(--sw-in)}
+.hl:is(:hover,:focus-visible) :is(.ago,.who,.meta,.cd i){opacity:.72}
+@media (prefers-reduced-motion:reduce){ .fx{display:none} .hl{--sw-in:0ms; --sw-out:0ms} }
+
+/* ---------- 作業詳情 (毛玻璃浮層) ---------- */
+:root{ --scrim:rgba(6,8,10,.52); --glass:rgba(24,27,31,.60); --glass-line:rgba(255,255,255,.10); --glass-hi:rgba(255,255,255,.06) }
+@media (prefers-color-scheme:light){ :root:not([data-theme="dark"]){ --scrim:rgba(40,44,40,.28); --glass:rgba(248,248,245,.64); --glass-line:rgba(0,0,0,.10); --glass-hi:rgba(255,255,255,.55) } }
+:root[data-theme="light"]{ --scrim:rgba(40,44,40,.28); --glass:rgba(248,248,245,.64); --glass-line:rgba(0,0,0,.10); --glass-hi:rgba(255,255,255,.55) }
+
+.scrim{position:fixed;inset:0;z-index:40;background:var(--scrim);
+  -webkit-backdrop-filter:blur(7px) saturate(.85);backdrop-filter:blur(7px) saturate(.85);
+  opacity:0;transition:opacity .22s ease}
+.sheet{position:fixed;inset:0;z-index:41;display:grid;place-items:center;
+  padding:max(16px, env(safe-area-inset-top,0px)) 16px max(16px, env(safe-area-inset-bottom,0px));pointer-events:none}
+.sheet .glass{pointer-events:auto;width:min(660px,100%);max-height:min(640px,100%);
+  background:linear-gradient(160deg, var(--glass-hi), transparent 30%), var(--glass);
+  -webkit-backdrop-filter:blur(22px) saturate(1.35);backdrop-filter:blur(22px) saturate(1.35);
+  border:1px solid var(--glass-line);
+  box-shadow:0 30px 80px -30px rgba(0,0,0,.7);
+  padding:18px 20px 18px;gap:14px;overflow:hidden;
+  clip-path:inset(49% 0 49% 0);opacity:0;
+  transition:clip-path .30s cubic-bezier(.2,.8,.2,1), opacity .18s ease, transform .42s cubic-bezier(.2,.7,.2,1)}
+.modal-on .scrim{opacity:1}
+.modal-on .sheet .glass{clip-path:inset(0);opacity:1}
+.sheet .glass::before{top:5px;right:5px}
+
+.md-head{display:flex;align-items:flex-start;gap:12px}
+.md-head .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.md-head .eyebrow{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.md-head .crs{font-size:12.5px;color:var(--muted)}
+.md-head h2{font-size:clamp(19px,3vw,23px);font-weight:700;line-height:1.25}
+.x{appearance:none;flex:none;width:32px;height:32px;display:grid;place-items:center;cursor:pointer;
+  background:transparent;border:1px solid var(--glass-line);color:var(--ink-2);
+  
+  transition:border-color .16s, color .16s, background .16s}
+.x:hover{border-color:var(--accent);color:var(--accent)}
+.x svg{width:13px;height:13px}
+
+.md-scroll{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:14px;
+  margin-right:-8px;padding-right:8px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+
+.clock{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.clock .big{display:flex;align-items:baseline;gap:4px;font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--tone)}
+.clock .big b{font-size:clamp(34px,6vw,44px);font-weight:500;line-height:1}
+.clock .big i{font-style:normal;font-size:12px;color:var(--muted);margin-right:8px}
+.clock .when{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--ink-2);padding-bottom:4px}
+.clock .when b{font-family:var(--f-mono);font-weight:500;color:var(--ink)}
+.pill{align-self:flex-start;font-size:11px;padding:2px 9px;border-radius:100px;background:var(--tone-soft);color:var(--tone);white-space:nowrap}
+
+.track{display:flex;flex-direction:column;gap:5px}
+.track .bar{position:relative;height:6px;background:var(--line-soft);overflow:visible}
+.track .fill{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg, color-mix(in srgb, var(--tone) 35%, transparent), var(--tone));
+  width:0;transition:width .6s cubic-bezier(.2,.7,.2,1) .12s}
+.track .now{position:absolute;top:-4px;width:2px;height:14px;background:var(--ink);transform:translateX(-1px);
+  transition:left .6s cubic-bezier(.2,.7,.2,1) .12s}
+.track .ends{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;margin:0;
+  background:var(--glass-line);border:1px solid var(--glass-line)}
+.facts div{background:var(--glass);padding:9px 12px;min-width:0}
+.facts dt{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 2px}
+.facts dd{margin:0;font-size:13.5px;color:var(--ink)}
+.facts dd.bad{color:var(--urgent)} .facts dd.good{color:var(--accent)}
+
+.desc h3, .mats h3{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.desc p{margin:0;font-size:13.5px;line-height:1.65;color:var(--ink-2);white-space:pre-line;max-width:68ch}
+.mats ul{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.mats a{display:inline-block;font-size:12.5px;text-decoration:none;color:var(--ink-2);padding:4px 10px;border:1px solid var(--glass-line);background:var(--glass-hi)}
+.mats a:hover{border-color:var(--accent);color:var(--accent)}
+.mats a.mat{display:inline-flex;align-items:center;gap:6px}
+.mats button.mat{appearance:none;font:inherit;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  color:var(--ink-2);padding:4px 10px;border:1px solid var(--glass-line);background:var(--glass-hi);transition:border-color .16s,color .16s,background .16s}
+.mats button.mat:hover{border-color:var(--accent);color:var(--accent)}
+.mats .mat.dir{border-style:dashed}
+.mats .mat.copied{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.mats .mat svg, .mats a svg{width:12px;height:12px;flex:none;opacity:.7}
+.mats .mats-hint{margin:7px 0 0;font-size:11.5px;color:var(--muted)}
+/* 教材按鈕: 固定寬度, 檔名太長 hover 時往後捲; 點了的提示字疊在上面, 不改變寬度 */
+.mats a.mc{position:relative;display:inline-flex;align-items:center;gap:6px;width:172px;overflow:hidden}
+.mats .mn{flex:1;min-width:0;overflow:hidden;white-space:nowrap;transition:opacity .3s ease}
+.mats .mn.ov{-webkit-mask-image:linear-gradient(90deg,#000 80%,transparent);mask-image:linear-gradient(90deg,#000 80%,transparent)}
+.mats a.mc:is(:hover,:focus-visible) .mn.ov{-webkit-mask-image:none;mask-image:none}
+.mats .mt{display:inline-block;transform:translateX(0);transition:transform .25s ease}
+.mats a.mc:is(:hover,:focus-visible) .mn.ov .mt{transform:translateX(var(--dx,0));transition:transform var(--dur,2s) linear .25s}
+.mats .ms{position:absolute;inset:0 10px 0 28px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;
+  opacity:0;pointer-events:none;transition:opacity .3s ease}
+.mats a.mc.flash .ms{opacity:1;transition:opacity .12s ease}
+.mats a.mc.flash .mn.ov .mt{transform:translateX(0);transition:none}
+.mats a.mc.flash .mn{opacity:0;transition:opacity .12s ease}
+.mats a.mc.flash{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+.md-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:12px;border-top:1px solid var(--glass-line)}
+.btn{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer;
+  padding:9px 16px 9px 18px;border:1px solid var(--glass-line);color:var(--ink);background:var(--glass-hi);
+  
+  transition:border-color .16s, color .16s, background .16s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{background:color-mix(in srgb, var(--accent) 86%, #fff);color:var(--accent-ink)}
+.btn svg{width:13px;height:13px;transition:transform .18s ease}
+.btn.primary:hover svg{transform:translate(2px,-2px)}
+.md-foot .hint{flex:1 1 220px;font-size:11.5px;color:var(--muted);text-align:right}
+.due{cursor:pointer}
+.tl .has{cursor:pointer}
+@media (max-width:560px){ .md-foot .hint{text-align:left} .btn{flex:1 1 auto;justify-content:center} }
+@media (prefers-reduced-motion:reduce){
+  .scrim, .sheet .glass, .track .fill, .track .now{transition:none}
+  .sheet .glass{clip-path:none}
+}
+
+.md-part{display:flex;flex-direction:column;gap:14px}
+.todo{border-left:2px solid var(--accent);background:var(--accent-soft);padding:9px 13px}
+.todo h3{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 3px}
+.todo p{margin:0;font-size:14px;color:var(--ink);font-weight:500}
+#mm-tags{display:flex;flex-wrap:wrap;gap:5px}
+.prompt-box{width:100%;min-height:140px;resize:vertical;font-family:var(--f-mono);font-size:12px;line-height:1.6;
+  color:var(--ink-2);background:var(--ground-2);border:1px solid var(--glass-line);padding:10px 12px}
+.btn.src{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.btn.src:hover{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn .k{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;opacity:.75}
+.md-foot .hint{flex:1 1 100%;text-align:left;order:9;margin-top:2px}
+
+/* 卡片改成 button: 清掉瀏覽器預設樣式 */
+button.due, button.mail{appearance:none;font:inherit;color:inherit;text-align:left;width:100%;margin:0;cursor:pointer}
+.bulk-list .bl{appearance:none;font:inherit;font-size:13px;color:inherit;background:none;border:0;padding:0;margin:0;
+  text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.bulk-list .bl:hover, .bulk-list .bl:focus-visible{color:var(--accent);text-decoration:underline}
+
+/* 同一天多份作業: 左右切換 */
+.md-nav{display:flex;align-items:center;gap:10px;flex:none;align-self:flex-start;margin:4px 6px 0 0}
+/* 作業浮層固定大小: 切換作業時外框和箭頭都不會動 (內容多了就在裡面捲) */
+.sheet .glass.fixed{width:min(660px,100%);height:min(640px,100%)}
+.sheet .glass.fixed .md-head h2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em}
+.md-nav span{font-family:var(--f-mono);font-size:11px;color:var(--muted);min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+.nv{appearance:none;width:24px;height:24px;display:grid;place-items:center;cursor:pointer;background:var(--accent-soft);
+  border:1px solid var(--accent);color:var(--accent);
+  transition:background .16s,color .16s}
+.nv:hover{background:var(--accent);color:var(--accent-ink)}
+.nv svg{width:10px;height:10px}
+@keyframes swapL{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes swapR{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+.swap-l :is(.md-head .t, .md-scroll){animation:swapL .22s cubic-bezier(.2,.7,.2,1)}
+.swap-r :is(.md-head .t, .md-scroll){animation:swapR .22s cubic-bezier(.2,.7,.2,1)}
+@media (prefers-reduced-motion:reduce){ .swap-l :is(.md-head .t,.md-scroll), .swap-r :is(.md-head .t,.md-scroll){animation:none} }
+
+/* ---------- 信箱：排序 + 篩選 ---------- */
+.mtools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:-2px}
+.seg{display:inline-flex;border:1px solid var(--line);background:var(--ground-2)}
+.seg button{appearance:none;font:inherit;font-size:12.5px;color:var(--ink-2);background:transparent;border:0;
+  padding:5px 12px;cursor:pointer;transition:background .16s,color .16s}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button:hover{color:var(--accent)}
+.seg button[aria-checked="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.only{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);cursor:pointer;user-select:none}
+.mt-sep{width:1px;height:18px;background:var(--line)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;
+  padding:4px 10px 4px 8px;border:1px solid var(--line);background:transparent;transition:border-color .16s,color .16s,background .16s}
+.chip b{font-family:var(--f-mono);font-weight:500;font-size:11px;color:var(--muted)}
+.chip:hover{border-color:var(--accent)}
+.chip:has(input:checked){color:var(--ink);border-color:color-mix(in srgb, var(--accent) 55%, var(--line));background:var(--accent-soft)}
+.chip:has(input:checked) b{color:var(--accent)}
+.chip.empty{opacity:.45}
+.mtools input[type="checkbox"]{accent-color:var(--accent);width:13px;height:13px;margin:0}
+.mtools :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.md-foot .hint b{font-family:var(--f-mono);font-weight:500;color:var(--ink-2)}
+
+/* ---------- 卡片背景大字：只有黃色框線, 往右下擦除淡出 ---------- */
+.holo{overflow:hidden}
+#band, .strip{flex:none}
+.holo > .wm{position:absolute;left:10px;top:4px;z-index:0;pointer-events:none;user-select:none;
+  font-family:var(--f-display);font-weight:700;font-size:clamp(80px,9vw,112px);line-height:1.08;letter-spacing:.04em;white-space:nowrap;
+  color:var(--accent);filter:url(#ol);opacity:.28;
+  -webkit-mask-image:linear-gradient(128deg,#000 30%,rgba(0,0,0,.72) 62%,rgba(0,0,0,.34) 100%);
+          mask-image:linear-gradient(128deg,#000 30%,rgba(0,0,0,.72) 62%,rgba(0,0,0,.34) 100%)}
+.holo > :not(.wm){position:relative;z-index:1}
+.holo .ph h2{font-size:24px;font-weight:700}
+#mail-foot{margin-top:22px;padding-top:10px;border-top:1px dashed var(--line)}
+
+/* ---------- hover 後: 大字幻燈片 ---------- */
+.hs{position:absolute;inset:0;z-index:2;container-type:size;pointer-events:none;visibility:hidden;
+  transition:visibility 0s var(--sw-out)}
+.hs b{position:absolute;inset:0 16px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;
+  font-family:var(--f-display);font-weight:700;line-height:1;letter-spacing:-.01em;color:var(--accent-ink);
+  font-size:min(56cqh, calc((100cqw - 32px) / var(--n, 4)));
+  opacity:0;transform:translateY(38%);transition:opacity .2s ease, transform .34s cubic-bezier(.2,.7,.2,1)}
+.hs b.on{opacity:1;transform:none}
+.hs b.out{opacity:0;transform:translateY(-38%)}
+.hs-dots{position:absolute;right:12px;bottom:8px;display:flex;gap:3px}
+.hs-dots i{width:10px;height:3px;background:var(--accent-ink);opacity:.25;transition:opacity .2s, width .2s}
+.hs-dots i.on{opacity:.8;width:16px}
+/* 刷過去被蓋住的那一瞬間, 原本的內容藏起來、大字出現; 移開時反過來 */
+.hl > :not(.fx):not(.hs){transition:visibility 0s var(--sw-out)}
+.hl:is(:hover,:focus-visible) > :not(.fx):not(.hs){visibility:hidden;transition:visibility 0s var(--sw-in)}
+.hl:is(:hover,:focus-visible) .hs{visibility:visible;transition:visibility 0s var(--sw-in)}
+@media (prefers-reduced-motion:reduce){ .hs b{transition:none} }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- 字的整體輪廓: 把填色字往外撐 1px, 再挖掉原本的字, 只剩外圈 -->
+    <filter id="ol" x="-5%" y="-10%" width="110%" height="120%">
+      <feMorphology in="SourceGraphic" operator="dilate" radius="1" result="grow"/>
+      <feComposite in="grow" in2="SourceGraphic" operator="out"/>
+    </filter>
+  </defs>
+</svg>
+<div class="app">
+
+  <header class="mast">
+    <h1 class="brand"><svg viewBox="-2 6 312 66" role="img" aria-label="BetterElearning"><title>BetterElearning</title>
+      <path class="l1" d="M2.655 30.0V8.400000000000002H27.855Q29.43 8.400000000000002 30.779999999999998 8.925Q32.129999999999995 9.45 32.9175 10.335Q33.705 11.220000000000002 33.705 12.3V16.71Q33.705 17.1 33.5925 17.490000000000002Q33.48 17.880000000000003 33.21 18.21Q34.11 19.05 34.582499999999996 19.785Q35.055 20.52 35.055 21.27V26.1Q35.055 27.18 34.2675 28.064999999999998Q33.48 28.95 32.129999999999995 29.475Q30.779999999999998 30.0 29.16 30.0H2.655ZM8.64 26.76H29.025Q29.52 26.76 29.835 26.535Q30.15 26.31 30.15 26.01V21.36Q30.15 21.060000000000002 29.835 20.835Q29.52 20.61 29.025 20.61H8.64Q8.19 20.61 7.852499999999999 20.835Q7.515 21.060000000000002 7.515 21.36V26.01Q7.515 26.31 7.852499999999999 26.535Q8.19 26.76 8.64 26.76ZM8.64 17.37H27.72Q28.169999999999998 17.37 28.485 17.145000000000003Q28.799999999999997 16.92 28.799999999999997 16.62V12.39Q28.799999999999997 12.09 28.485 11.865Q28.169999999999998 11.64 27.72 11.64H8.64Q8.19 11.64 7.852499999999999 11.865Q7.515 12.09 7.515 12.39V16.62Q7.515 16.92 7.852499999999999 17.145000000000003Q8.19 17.37 8.64 17.37Z M73.33800000000001 30.0Q71.71800000000002 30.0 70.41300000000001 29.46Q69.10800000000002 28.92 68.29800000000002 28.05Q67.48800000000001 27.18 67.48800000000001 26.1V16.5Q67.48800000000001 15.42 68.29800000000002 14.55Q69.10800000000002 13.68 70.41300000000001 13.14Q71.71800000000002 12.600000000000001 73.33800000000001 12.600000000000001H88.18800000000002Q89.808 12.600000000000001 91.13550000000001 13.125000000000002Q92.46300000000001 13.650000000000002 93.25050000000002 14.55Q94.03800000000001 15.450000000000001 94.03800000000001 16.5V22.92H72.34800000000001V26.01Q72.34800000000001 26.31 72.68550000000002 26.535Q73.02300000000001 26.76 73.47300000000001 26.76H94.03800000000001V30.0H73.33800000000001ZM72.34800000000001 19.89H89.13300000000001V16.59Q89.13300000000001 16.29 88.81800000000001 16.064999999999998Q88.50300000000001 15.84 88.05300000000001 15.84H73.47300000000001Q73.02300000000001 15.84 72.68550000000002 16.064999999999998Q72.34800000000001 16.29 72.34800000000001 16.59Z M132.32100000000003 30.0Q130.70100000000002 30.0 129.37350000000004 29.46Q128.04600000000002 28.92 127.25850000000003 28.05Q126.47100000000002 27.18 126.47100000000002 26.1V7.109999999999999H131.33100000000002V12.600000000000001H142.041V15.84H131.33100000000002V26.01Q131.33100000000002 26.31 131.6685 26.535Q132.006 26.76 132.45600000000002 26.76H142.041V30.0H132.32100000000003Z M179.199 30.0Q177.579 30.0 176.25150000000002 29.46Q174.924 28.92 174.1365 28.05Q173.349 27.18 173.349 26.1V7.109999999999999H178.209V12.600000000000001H188.91899999999998V15.84H178.209V26.01Q178.209 26.31 178.54649999999998 26.535Q178.884 26.76 179.334 26.76H188.91899999999998V30.0H179.199Z M225.98700000000002 30.0Q224.36700000000002 30.0 223.062 29.46Q221.757 28.92 220.947 28.05Q220.137 27.18 220.137 26.1V16.5Q220.137 15.42 220.947 14.55Q221.757 13.68 223.062 13.14Q224.36700000000002 12.600000000000001 225.98700000000002 12.600000000000001H240.83700000000002Q242.45700000000002 12.600000000000001 243.78450000000004 13.125000000000002Q245.11200000000002 13.650000000000002 245.89950000000002 14.55Q246.687 15.450000000000001 246.687 16.5V22.92H224.997V26.01Q224.997 26.31 225.33450000000002 26.535Q225.67200000000003 26.76 226.122 26.76H246.687V30.0H225.98700000000002ZM224.997 19.89H241.782V16.59Q241.782 16.29 241.467 16.064999999999998Q241.15200000000002 15.84 240.702 15.84H226.122Q225.67200000000003 15.84 225.33450000000002 16.064999999999998Q224.997 16.29 224.997 16.59Z M279.075 30.0V16.5Q279.075 15.42 279.885 14.55Q280.695 13.68 282.02250000000004 13.14Q283.35 12.600000000000001 284.925 12.600000000000001H299.505V15.84H285.06Q284.61 15.84 284.27250000000004 16.064999999999998Q283.935 16.29 283.935 16.59V30.0Z"/>
+      <path class="l2" d="M4.901999999999999 64.0Q3.9614999999999996 64.0 3.1777499999999996 63.686499999999995Q2.3939999999999997 63.373 1.9237499999999996 62.8505Q1.4534999999999998 62.328 1.4534999999999998 61.701V55.278999999999996Q1.4534999999999998 54.652 1.9237499999999996 54.1295Q2.3939999999999997 53.607 3.1777499999999996 53.2935Q3.9614999999999996 52.980000000000004 4.901999999999999 52.980000000000004H14.819999999999999Q15.788999999999998 52.980000000000004 16.57275 53.2935Q17.356499999999997 53.607 17.826749999999997 54.1295Q18.296999999999997 54.652 18.296999999999997 55.278999999999996V59.269H3.7904999999999998V61.701Q3.7904999999999998 62.005 4.11825 62.2235Q4.446 62.442 4.901999999999999 62.442H18.296999999999997V64.0H4.901999999999999ZM3.7904999999999998 57.711H15.931499999999998V55.278999999999996Q15.931499999999998 54.975 15.603749999999998 54.7565Q15.275999999999998 54.538 14.819999999999999 54.538H4.901999999999999Q4.446 54.538 4.11825 54.7565Q3.7904999999999998 54.975 3.7904999999999998 55.278999999999996Z M39.21124999999999 64.0V50.301H41.519749999999995V62.461H59.73124999999999V64.0Z M82.55499999999999 64.0Q81.61449999999999 64.0 80.83075 63.686499999999995Q80.047 63.373 79.57675 62.8505Q79.1065 62.328 79.1065 61.701V55.278999999999996Q79.1065 54.652 79.57675 54.1295Q80.047 53.607 80.83075 53.2935Q81.61449999999999 52.980000000000004 82.55499999999999 52.980000000000004H92.47299999999998Q93.442 52.980000000000004 94.22574999999999 53.2935Q95.00949999999999 53.607 95.47975 54.1295Q95.94999999999999 54.652 95.94999999999999 55.278999999999996V59.269H81.44349999999999V61.701Q81.44349999999999 62.005 81.77124999999998 62.2235Q82.09899999999999 62.442 82.55499999999999 62.442H95.94999999999999V64.0H82.55499999999999ZM81.44349999999999 57.711H93.58449999999999V55.278999999999996Q93.58449999999999 54.975 93.25674999999998 54.7565Q92.92899999999999 54.538 92.47299999999998 54.538H82.55499999999999Q82.09899999999999 54.538 81.77124999999998 54.7565Q81.44349999999999 54.975 81.44349999999999 55.278999999999996Z M120.17024999999998 64.0Q119.22974999999998 64.0 118.44599999999998 63.686499999999995Q117.66224999999999 63.373 117.19199999999998 62.8505Q116.72174999999999 62.328 116.72174999999999 61.701V57.711H131.19975V55.278999999999996Q131.19975 54.975 130.87199999999999 54.7565Q130.54424999999998 54.538 130.08825 54.538H116.72174999999999V52.980000000000004H130.08825Q131.05724999999998 52.980000000000004 131.84099999999998 53.2935Q132.62474999999998 53.607 133.09499999999997 54.1295Q133.56525 54.652 133.56525 55.278999999999996V64.0ZM120.17024999999998 62.442H131.19975V59.269H119.05874999999999V61.701Q119.05874999999999 62.005 119.38649999999998 62.2235Q119.71424999999999 62.442 120.17024999999998 62.442Z M154.3655 64.0V55.278999999999996Q154.3655 54.652 154.83575000000002 54.1295Q155.306 53.607 156.08975 53.2935Q156.8735 52.980000000000004 157.814 52.980000000000004H167.105V54.538H157.814Q157.358 54.538 157.03025 54.7565Q156.7025 54.975 156.7025 55.278999999999996V64.0Z M186.87924999999998 64.0V52.980000000000004H200.27425Q201.21475 52.980000000000004 201.9985 53.2935Q202.78225 53.607 203.2525 54.1295Q203.72275 54.652 203.72275 55.278999999999996V64.0H201.38575V55.278999999999996Q201.38575 54.975 201.058 54.7565Q200.73024999999998 54.538 200.27425 54.538H190.35625Q189.90025 54.538 189.55825 54.7565Q189.21625 54.975 189.21625 55.278999999999996V64.0Z M224.523 64.0V52.980000000000004H226.85999999999999V64.0ZM224.523 50.928V49.370000000000005H226.85999999999999V50.928Z M248.37274999999994 64.0V52.980000000000004H261.76775Q262.70824999999996 52.980000000000004 263.49199999999996 53.2935Q264.27574999999996 53.607 264.746 54.1295Q265.21624999999995 54.652 265.21624999999995 55.278999999999996V64.0H262.87924999999996V55.278999999999996Q262.87924999999996 54.975 262.5514999999999 54.7565Q262.22374999999994 54.538 261.76775 54.538H251.84974999999994Q251.39374999999995 54.538 251.05174999999997 54.7565Q250.70974999999996 54.975 250.70974999999996 55.278999999999996V64.0Z M288.7525 68.351V66.774H299.0695Q299.52549999999997 66.774 299.85325 66.5555Q300.181 66.337 300.181 66.033V64.0H289.1515Q288.21099999999996 64.0 287.42724999999996 63.686499999999995Q286.64349999999996 63.373 286.17324999999994 62.8505Q285.703 62.328 285.703 61.701V55.278999999999996Q285.703 54.652 286.17324999999994 54.1295Q286.64349999999996 53.607 287.42724999999996 53.2935Q288.21099999999996 52.980000000000004 289.1515 52.980000000000004H299.0695Q300.0385 52.980000000000004 300.82225 53.2935Q301.606 53.607 302.062 54.1295Q302.518 54.652 302.518 55.278999999999996V66.033Q302.518 66.679 302.062 67.20150000000001Q301.606 67.724 300.82225 68.0375Q300.0385 68.351 299.0695 68.351ZM289.1515 62.442H299.0695Q299.52549999999997 62.442 299.85325 62.2235Q300.181 62.005 300.181 61.701V55.278999999999996Q300.181 54.975 299.85325 54.7565Q299.52549999999997 54.538 299.0695 54.538H289.1515Q288.6955 54.538 288.36775 54.7565Q288.03999999999996 54.975 288.03999999999996 55.278999999999996V61.701Q288.03999999999996 62.005 288.36775 62.2235Q288.6955 62.442 289.1515 62.442Z"/></svg></h1>
+    <span class="term" id="term"></span>
+    <nav class="tabs" aria-label="分頁">
+      <button class="tab on" data-view="home" type="button">焦點</button>
+      <button class="tab" data-view="courses" type="button">課程 <b id="t-courses">7</b></button>
+      <button class="tab" data-view="library" type="button">教材 <b id="t-files">0</b></button>
+      <button class="tab" data-view="system" type="button">系統</button>
+    </nav>
+    <span class="spacer"></span>
+    <div class="stamp" id="stamp"></div>
+  </header>
+
+  <div class="stage">
+
+    <!-- ================= 焦點 ================= -->
+    <div class="view on" id="v-home" role="region" aria-label="焦點">
+      <dl class="strip">
+        <div><span class="wm" aria-hidden="true"></span><dt>待交作業</dt><dd class="num" id="s-pending">0</dd></div>
+        <div><span class="wm" aria-hidden="true"></span><dt>最近期限</dt><dd class="num" id="s-next">—</dd></div>
+        <div><span class="wm" aria-hidden="true"></span><dt>信箱未讀</dt><dd class="num" id="s-mail">—</dd></div>
+        <div><span class="wm" aria-hidden="true"></span><dt>已索引教材</dt><dd class="num" id="s-index">0</dd></div>
+      </dl>
+
+      <section class="holo" id="band" data-tilt="0.45">
+        <span class="wm" aria-hidden="true">任務</span>
+        <header class="ph"><h2>任務</h2></header>
+        <div class="band-body">
+          <ul class="due-list" id="dues"></ul>
+          <div class="tl" id="tl" aria-label="這週起三週"></div>
+        </div>
+      </section>
+      <p class="band-empty" id="band-empty" hidden><i></i><b>沒有待交的作業</b>下次同步有新的會出現在這裡</p>
+
+      <section class="holo grow" data-tilt="0.6">
+        <span class="wm" aria-hidden="true">信箱</span>
+        <header class="ph"><h2>信箱</h2></header>
+        <div class="mtools">
+          <div class="seg" role="radiogroup" aria-label="排序">
+            <button type="button" role="radio" data-sort="time" aria-checked="true">依時間</button>
+            <button type="button" role="radio" data-sort="rank" aria-checked="false">依重要性</button>
+          </div>
+          <label class="only" for="mf-focus"><input type="checkbox" id="mf-focus" checked> 只看需注意</label>
+          <span class="mt-sep" aria-hidden="true"></span>
+          <div class="chips" id="mf-groups" role="group" aria-label="寄件來源"></div>
+        </div>
+        <div class="scroll">
+          <ul class="mails" id="mails"></ul>
+          <p class="mail-foot" id="mail-foot"></p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= 課程 ================= -->
+    <div class="view" id="v-courses" role="region" aria-label="課程">
+      <div class="ph" style="padding:2px 2px 0"><h2>課程</h2></div>
+      <div class="scroll"><ul class="courses" id="courses"></ul></div>
+    </div>
+
+    <!-- ================= 教材 ================= -->
+    <div class="view" id="v-library" role="region" aria-label="教材">
+      <section class="holo panel" data-tilt>
+        <span class="wm" aria-hidden="true">教材</span>
+        <header class="ph"><h2>教材全文檢索</h2></header>
+        <div class="scroll" id="lib-body"></div>
+      </section>
+    </div>
+
+    <!-- ================= 系統 ================= -->
+    <div class="view" id="v-system" role="region" aria-label="系統">
+      <section class="holo notes" data-tilt>
+        <span class="wm" aria-hidden="true">系統</span>
+        <header class="ph"><h2>這頁怎麼運作</h2></header>
+        <p>資料全部來自你電腦上的同步程式：課程和作業是 <code>moodle_sync.py</code> 寫的 <code>latest.json</code>，信箱是 <code>mail_sync.py</code> 用 IMAP 讀 gms 信箱寫的 <code>mail.json</code>。這頁只放未讀信的寄件者、主旨、開頭一小段，以及「需注意」信件的摘要，完整內文留在你電腦裡。</p>
+        <p>每天 Claude 的排程會把兩份檔案讀進來更新這頁；電腦沒開那天就不會更新，右上角的時間戳會告訴你資料是幾號的。同步程式有沒有在跑，可以在 <code>_moodle</code> 資料夾執行 <code>check_task.ps1</code> 看。</p>
+        <p>分頁可以用鍵盤 <code>1</code>–<code>4</code> 切換；信箱的排序和篩選會記在這台瀏覽器。點作業或信件會開詳情浮層，要去原網頁用浮層裡的「出處」按鈕；作業浮層可以用 ← → 切換。</p>
+        <div id="sys-err"></div>
+        <p class="mail-foot" id="sys-mail"></p>
+      </section>
+    </div>
+
+  </div>
+</div>
+
+<div id="modal" hidden>
+  <div class="scrim" data-close></div>
+  <div class="sheet">
+    <section class="glass holo" role="dialog" aria-modal="true" aria-labelledby="md-title" data-tilt="0.35">
+      <header class="md-head">
+        <div class="t">
+          <span class="eyebrow" id="md-eyebrow"></span>
+          <span class="crs" id="md-course"></span>
+          <h2 id="md-title"></h2>
+        </div>
+        <div class="md-nav" id="md-nav" hidden>
+          <button class="nv" type="button" id="md-prev" aria-label="上一份作業"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 2.5 4 6l3.5 3.5"/></svg></button>
+          <span id="md-pos">1 / 2</span>
+          <button class="nv" type="button" id="md-next" aria-label="下一份作業"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5"/></svg></button>
+        </div>
+        <button class="x" type="button" data-close aria-label="關閉">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+        </button>
+      </header>
+
+      <div class="md-scroll">
+        <!-- 作業 -->
+        <div class="md-part" id="md-assign">
+          <div class="clock">
+            <div class="big" id="md-count"></div>
+            <div class="when" id="md-when"></div>
+            <span class="pill" id="md-pill"></span>
+          </div>
+          <div class="track" id="md-track" hidden>
+            <div class="bar"><div class="fill" id="md-fill"></div><div class="now" id="md-now"></div></div>
+            <div class="ends"><span id="md-open"></span><span id="md-pct"></span><span id="md-due"></span></div>
+          </div>
+          <dl class="facts" id="md-facts"></dl>
+          <div class="desc" id="md-desc-wrap"><h3>作業說明</h3><p id="md-desc"></p></div>
+          <div class="mats" id="md-mats-wrap"><h3>這門課的教材</h3><ul id="md-mats"></ul><p class="mats-hint">點教材會複製本機路徑，並試著交給系統開啟；沒打開的話，把路徑貼到檔案總管網址列（或 Win+R）就好。檔名太長的，滑鼠移上去會捲出完整名稱。</p></div>
+        </div>
+
+        <!-- 信件 -->
+        <div class="md-part" id="md-mail">
+          <dl class="facts" id="mm-facts"></dl>
+          <div class="todo" id="mm-todo-wrap"><h3>要做的事</h3><p id="mm-todo"></p></div>
+          <div class="desc" id="mm-sum-wrap"><h3 id="mm-sum-h">摘要</h3><p id="mm-sum"></p></div>
+          <div class="tags" id="mm-tags"></div>
+        </div>
+
+        <textarea class="prompt-box" id="md-prompt" readonly hidden aria-label="Cowork prompt"></textarea>
+      </div>
+
+      <footer class="md-foot" id="md-foot"></footer>
+    </section>
+  </div>
+</div>
+
+<script>
+// ↓ 每天由 daily-update 技能 (scripts/build.py) 整個換掉, 別手動改
+const DATA = {
+    "generated_at": "2026-01-01T00:00:00+08:00",
+    "semester": "",
+    "root": "",
+    "assignments": [],
+    "courses": [],
+    "index": {
+      "files": 0,
+      "chunks": 0,
+      "courses": []
+    },
+    "errors": []
+  };
+
+const MAIL = {
+    "generated_at": "2026-01-01T00:00:00+08:00",
+    "account": "",
+    "window_days": 14,
+    "stats": {
+      "total": 0,
+      "unread": 0,
+      "new": 0
+    },
+    "messages": [],
+    "noise": [],
+    "dept": {
+      "label": "系上",
+      "pattern": "系辦"
+    },
+    "errors": []
+  };
+
+// ---- 從資料填頁面上的固定欄位 ----
+{
+  const ix = DATA.index || { files:0, chunks:0, courses:[] };
+  document.getElementById("term").textContent = DATA.semester || "";
+  document.getElementById("t-files").textContent = ix.files || 0;
+  document.getElementById("s-index").innerHTML = `${ix.files || 0} <small>檔 · ${ix.chunks || 0} 段</small>`;
+  const e = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+  const py = `${DATA.root || "."}\\_moodle\\search.py`;
+  document.getElementById("lib-body").innerHTML = `
+    <p>目前索引 <b>${ix.files || 0}</b> 個檔案、${ix.chunks || 0} 段文字（PDF / PPT / Word / 純文字；zip 會自動解開）。老師每上傳一份新講義，隔天同步後就會出現在這裡。</p>
+    ${(ix.courses || []).length ? `<ul class="idx">${ix.courses.map(c =>
+      `<li><span class="who">${e(c.course)}</span><span class="what">${c.files} 檔 · ${c.chunks} 段</span></li>`).join("")}</ul>`
+      : (ix.files ? "" : `<p class="skipped">還沒有索引到任何教材 —— 學期初老師還沒上傳是正常的。</p>`)}
+    <p class="ask"><b>要查東西直接問 Claude</b> —— 「哪堂課講過 context switch」、「資料庫那份 PDF 第幾頁在講關聯模型」之類的，它會去翻索引。</p>
+    <pre>python "${e(py)}" <b>"分頁"</b>
+python "${e(py)}" <b>--stats</b></pre>`;
+  const errs = [...(DATA.errors || []), ...(MAIL.errors || [])];
+  document.getElementById("sys-err").innerHTML = errs.map(x => `<p class="err">${e(x)}</p>`).join("");
+}
+
+const KIND = { assign:"作業", resource:"檔案", folder:"資料夾", forum:"公告",
+               page:"頁面", url:"連結", quiz:"測驗", label:"說明" };
+
+const pad = n => String(n).padStart(2,"0");
+const fmt = d => `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const esc = s => String(s).replace(/[&<>"]/g, c =>
+  ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+function tone(days, submitted){
+  if (submitted) return { t:"var(--accent)", s:"var(--accent-soft)", label:"已繳交" };
+  if (days < 0)  return { t:"var(--urgent)", s:"var(--urgent-soft)", label:"已過期" };
+  if (days <= 3) return { t:"var(--urgent)", s:"var(--urgent-soft)", label:"快到了" };
+  if (days <= 7) return { t:"var(--soon)",   s:"var(--soon-soft)",   label:"這週內" };
+  return { t:"var(--calm)", s:"var(--calm-soft)", label:"還有時間" };
+}
+
+const now = new Date();
+
+// ---- hover 大字幻燈片 ----
+// 字寬估算: 中日韓算 1, 其他算 0.62, 讓每張都盡量撐滿卡片寬
+const glyphW = s => [...s].reduce((w, ch) => w + (ch.codePointAt(0) > 0x2E80 ? 1 : 0.62), 0);
+const slidesHTML = arr => {
+  const list = arr.filter(Boolean).slice(0, 5);
+  if (!list.length) return "";
+  return `<span class="hs" aria-hidden="true">${list.map((s, i) =>
+      `<b style="--n:${Math.max(2.4, glyphW(s)).toFixed(2)}" class="${i ? "" : "on"}">${esc(s)}</b>`).join("")}
+    ${list.length > 1 ? `<span class="hs-dots">${list.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</span>` : ""}</span>`;
+};
+
+// ---- 期限 ----
+const dues = DATA.assignments
+  .map(a => { const d = new Date(a.due); return { ...a, d, days: Math.floor((d - now) / 86400000) }; })
+  .sort((x, y) => x.d - y.d);
+
+const list = document.getElementById("dues");
+document.getElementById("band").hidden = !dues.length;      // 沒作業就整條收起
+document.getElementById("band-empty").hidden = !!dues.length;
+if (dues.length){
+  list.innerHTML = dues.map((a, i) => {
+    const c = tone(a.days, a.submitted);
+    const n = Math.abs(a.days);
+    const when = `${pad(a.d.getMonth()+1)}/${pad(a.d.getDate())} ${pad(a.d.getHours())}:${pad(a.d.getMinutes())}`;
+    const urgent = !a.submitted && a.days >= 0 && a.days <= 3 ? 1 : 0;
+    return `<li class="rise" style="--i:${i+2}"><button type="button" class="due lift hl"
+        title="${esc(a.name)} — ${fmt(a.d)} 截止" data-urgent="${urgent}" data-idx="${i}"
+        style="--tone:${c.t};--tone-soft:${c.s}">
+      <span class="fx" aria-hidden="true"><i></i><i></i><i></i></span>
+      ${slidesHTML([
+        a.course,
+        a.name.split(/[:：]/)[0].trim(),
+        a.days < 0 ? "已過期" : a.days === 0 ? "今天截止" : `剩 ${a.days} 天`,
+        when,
+        a.submitted ? "已繳交" : "還沒交",
+      ])}
+      <span class="cd"><b>${n}</b><i>${a.days < 0 ? "天前" : "天"}</i></span>
+      <span>
+        <span class="what">${esc(a.name)}</span>
+        <span class="meta">${esc(a.course)} · <b>${when}</b> 截止 · ${a.submitted ? "已繳交" : "未繳交"}</span>
+      </span>
+      <span class="state">${c.label}</span>
+    </button></li>`;
+  }).join("");
+
+  const next = dues.find(a => !a.submitted && a.days >= 0) || dues[0];
+  const nt = tone(next.days, next.submitted);
+  const nextCell = document.getElementById("s-next").parentElement;
+  nextCell.style.setProperty("--tone", nt.t);
+  nextCell.style.setProperty("--tone-soft", nt.s);
+  if (next.days <= 7) nextCell.dataset.tone = "1";
+  document.getElementById("s-next").innerHTML = `${Math.abs(next.days)} <small>天後 · ${esc(next.course)}</small>`;
+  document.getElementById("s-pending").textContent = dues.filter(a => !a.submitted).length;
+}
+
+// ---- 日曆: 這週起三週, 一排一禮拜 (週一開頭) ----
+{
+  const WH = ["一","二","三","四","五","六","日"];
+  const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dow = (day0.getDay() + 6) % 7;                  // 週一 = 0
+  const cells = WH.map((w, i) => `<span class="wh ${i >= 5 ? "wk" : ""}">${w}</span>`);
+  for (let k = 0; k < 21; k++){
+    const off = k - dow;                                // 距離今天幾天 (負的是已經過去)
+    const d = new Date(day0); d.setDate(day0.getDate() + off);
+    const hits = dues.filter(a => Math.floor((a.d - day0) / 86400000) === off);
+    const cls = ["c", off === 0 ? "today" : "", off < 0 ? "past" : "", hits.length ? "has" : "",
+                 k % 7 >= 5 ? "wk" : ""].filter(Boolean).join(" ");
+    const worst = hits.length ? tone(Math.min(...hits.map(h => h.days)), hits.every(h => h.submitted)) : null;
+    const title = hits.length ? hits.map(h => `${h.course}：${h.name}`).join("\n") : "";
+    cells.push(`<div class="${cls}" ${worst ? `style="--tone:${worst.t}" data-group="${hits.map(h => dues.indexOf(h)).join(",")}"` : ""} ${title ? `title="${esc(title)}"` : ""}>
+      <span class="dn">${d.getDate()}</span>
+      <span class="dots">${hits.slice(0,3).map(() => "<i></i>").join("")}</span>
+    </div>`);
+  }
+  document.getElementById("tl").innerHTML = cells.join("");
+}
+
+// ---- 信箱 ----
+// 分三類: 雜訊(只計數) / 校園公告(摺疊) / 需注意(展開列出)
+const M_NOISE_ADDR = ["no-reply@accounts.google.com", "elearn@gms.ndhu.edu.tw",
+                      ...(MAIL.noise || [])];                // config.ini [dashboard] noise_senders
+const M_NOISE_SUBJ = [/安全性快訊/, /安全性警示/, /新登入紀錄/, /newsletter/i];
+const M_BULK_ADDR  = ["announce@gms.ndhu.edu.tw"];
+const M_DIGEST     = /批次寄送/;
+const M_STRONG     = ["截止", "逾期", "繳費", "選課", "停課", "補課", "調課",
+                      "成績", "獎學金", "考試", "註冊", "重要"];
+const M_URGENT     = ["截止", "逾期", "重要"];   // 主旨出現這幾個字才上紅色
+
+const ago = d => {
+  const days = Math.floor((now - d) / 86400000);
+  if (days <= 0) return "今天";
+  if (days === 1) return "昨天";
+  return `${days} 天前`;
+};
+function bucket(m){
+  if (M_NOISE_ADDR.includes(m.addr)) return "noise";
+  if (M_NOISE_SUBJ.some(re => re.test(m.subject))) return "noise";
+  if (M_DIGEST.test(m.subject)) return "bulk";
+  if (M_BULK_ADDR.includes(m.addr)){
+    return m.kw.filter(k => M_STRONG.includes(k)).length >= 2 ? "focus" : "bulk";
+  }
+  return "focus";
+}
+const inSubj = (m, k) => m.subject.includes(k);
+function mailTone(m){
+  const strong = m.kw.filter(k => M_STRONG.includes(k));
+  if (M_URGENT.some(k => inSubj(m, k))) return { t:"var(--urgent)", s:"var(--urgent-soft)" };
+  if (strong.length) return { t:"var(--soon)", s:"var(--soon-soft)" };
+  return null;
+}
+
+const seen = new Set();
+const mails = MAIL.messages
+  .map(m => ({ ...m, d: new Date(m.date), bucket: bucket(m) }))
+  .sort((x, y) => y.d - x.d)
+  .filter(m => { const key = m.addr + "|" + m.subject; if (seen.has(key)) return false; seen.add(key); return true; });
+
+const focus = mails.filter(m => m.bucket === "focus");
+const bulk  = mails.filter(m => m.bucket === "bulk");
+const noise = mails.filter(m => m.bucket === "noise");
+
+document.getElementById("s-mail").innerHTML = `${MAIL.stats.unread} <small>封未讀 · 需注意 ${focus.length}</small>`;
+
+// 沒有人工短句的信: 主旨去掉【…】和「給：…」前綴, 取前 9 個字 + 強關鍵字
+function mailFlash(m){
+  if (m.flash && m.flash.length) return m.flash;
+  let s = m.subject.replace(/^(給：[^-]*-+)|【[^】]*】|\[[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
+  if (glyphW(s) > 9) { let out = ""; for (const ch of s){ if (glyphW(out + ch) > 8.4) break; out += ch; } s = out + "…"; }
+  const strong = m.kw.filter(k => M_STRONG.includes(k)).slice(0, 3).join("・");
+  return [s, strong];
+}
+const mailRow = (m, i) => {
+  const t = mailTone(m);
+  const tags = m.kw.filter(k => M_STRONG.includes(k))
+    .map(k => `<span class="tag ${M_URGENT.includes(k) && inSubj(m, k) ? "t-urgent" : ""}">${esc(k)}</span>`).join("");
+  const att = m.att ? `<span class="tag att">附件 ${m.att}</span>` : "";
+  return `<li class="rise" style="--i:${i+2}"><button type="button" class="mail lift hl" data-mi="${mails.indexOf(m)}"
+      ${t ? `style="--tone:${t.t};--tone-soft:${t.s}"` : ""}>
+    <span class="fx" aria-hidden="true"><i></i><i></i><i></i></span>
+    ${slidesHTML(mailFlash(m))}
+    <span class="ago">${ago(m.d)}</span>
+    <span class="who">${esc(m.from)}</span>
+    <span class="subj">${esc(m.subject)}</span>
+    ${tags || att ? `<span class="tags">${tags}${att}</span>` : ""}
+  </button></li>`;
+};
+const chev = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`;
+
+// ---- 信箱：來源分組 / 重要性 / 排序與篩選 ----
+const M_GROUPS = [
+  { id:"dept",   label:(MAIL.dept && MAIL.dept.label) || "系上" },
+  { id:"course", label:"課程" },
+  { id:"office", label:"學校單位" },
+  { id:"news",   label:"校園公告" },
+  { id:"other",  label:"其他" },
+  { id:"sys",    label:"系統通知" },
+];
+const M_DEPT_RE = (() => { try { return new RegExp((MAIL.dept && MAIL.dept.pattern) || "系辦", "i"); } catch (e) { return /系辦/; } })();
+function groupOf(m){
+  if (m.bucket === "noise") return "sys";
+  if (M_BULK_ADDR.includes(m.addr)) return "news";
+  if (/經由\(東華e學苑/.test(m.from)) return "course";
+  if (M_DEPT_RE.test(m.from + " " + m.subject)) return "dept";
+  if (/@gms\.ndhu\.edu\.tw$|@ndhu\.edu\.tw$/.test(m.addr)) return "office";
+  return "other";
+}
+const G_WEIGHT = { course:25, dept:20, office:10, news:0, other:0, sys:-50 };
+function rankOf(m){
+  const strong = m.kw.filter(k => M_STRONG.includes(k)).length;
+  return (M_URGENT.some(k => inSubj(m, k)) ? 100 : 0) + strong * 12
+    + (m.bucket === "focus" ? 30 : 0) + (m.action ? 15 : 0) + G_WEIGHT[m.group];
+}
+mails.forEach(m => { m.group = groupOf(m); m.rank = rankOf(m); });
+
+const MF_KEY = "mail-filter-v1";
+const mf = { sort:"time", focus:true, groups: M_GROUPS.filter(g => g.id !== "sys").map(g => g.id) };
+try { Object.assign(mf, JSON.parse(localStorage.getItem(MF_KEY) || "{}")); } catch (e) {}
+const saveMF = () => { try { localStorage.setItem(MF_KEY, JSON.stringify(mf)); } catch (e) {} };
+
+const pool = () => mails.filter(m => !mf.focus || m.bucket === "focus");
+
+function renderChips(){
+  const p = pool();
+  document.getElementById("mf-groups").innerHTML = M_GROUPS.map(g => {
+    const n = p.filter(m => m.group === g.id).length;
+    const on = mf.groups.includes(g.id);
+    return `<label class="chip ${n ? "" : "empty"}"><input type="checkbox" value="${g.id}" ${on ? "checked" : ""}> ${g.label} <b>${n}</b></label>`;
+  }).join("");
+}
+function renderMails(){
+  const list = pool().filter(m => mf.groups.includes(m.group));
+  list.sort(mf.sort === "rank" ? (a, b) => (b.rank - a.rank) || (b.d - a.d) : (a, b) => b.d - a.d);
+  document.getElementById("mails").innerHTML = list.length
+    ? list.map(mailRow).join("")
+    : `<li class="quiet">這個篩選條件下沒有未讀信。</li>`;
+  const sc = document.querySelector("#v-home .scroll"); if (sc) sc.scrollTop = 0;
+}
+function paintSort(){
+  document.querySelectorAll(".seg [data-sort]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.sort === mf.sort)));
+}
+document.getElementById("mf-focus").checked = mf.focus;
+paintSort(); renderChips(); renderMails();
+
+document.querySelector(".seg").addEventListener("click", e => {
+  const b = e.target.closest("[data-sort]"); if (!b || b.dataset.sort === mf.sort) return;
+  mf.sort = b.dataset.sort; paintSort(); renderMails(); saveMF();
+});
+document.querySelector(".seg").addEventListener("keydown", e => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault(); e.stopPropagation();
+  mf.sort = mf.sort === "time" ? "rank" : "time"; paintSort(); renderMails(); saveMF();
+  document.querySelector(`.seg [data-sort="${mf.sort}"]`).focus();
+});
+document.getElementById("mf-focus").addEventListener("change", e => {
+  mf.focus = e.target.checked; renderChips(); renderMails(); saveMF();
+});
+document.getElementById("mf-groups").addEventListener("change", e => {
+  const v = e.target.value; if (!v) return;
+  mf.groups = e.target.checked ? [...new Set([...mf.groups, v])] : mf.groups.filter(x => x !== v);
+  renderMails(); saveMF();
+});
+
+const mgen = new Date(MAIL.generated_at);
+const mailFoot = `${MAIL.account} · 最近 ${MAIL.window_days} 天共 ${MAIL.stats.total} 封，未讀 ${MAIL.stats.unread}`
+  + (noise.length ? `，另有 ${noise.length} 封系統通知（登入紀錄、安全性快訊、電子報）沒列出來` : "")
+  + ` · 擷取於 ${fmt(mgen)}`;
+document.getElementById("mail-foot").textContent = mailFoot;
+document.getElementById("sys-mail").textContent = mailFoot;
+
+// ---- 課程 ----
+document.getElementById("courses").innerHTML = DATA.courses.map((c, ci) => {
+  const body = c.items.length
+    ? `<ul class="items">${c.items.map(i => `
+        <li><span class="kind k-${i.kind}">${KIND[i.kind] || i.kind}</span>
+        <a href="${i.url}" target="_blank" rel="noopener">${esc(i.name)}</a></li>`).join("")}</ul>`
+    : `<div class="quiet">還沒有任何內容</div>`;
+  return `<li class="course holo rise" data-tilt style="--i:${ci+1}">
+    <header>
+      <span class="code">${esc(c.code)}</span>
+      <h3><a href="https://elearn4.ndhu.edu.tw/moodle/course/view.php?id=${c.id}" target="_blank" rel="noopener">${esc(c.name)}</a></h3>
+      <span class="dept">${esc(c.dept)}</span>
+    </header>
+    ${body}
+  </li>`;
+}).join("");
+document.getElementById("t-courses").textContent = DATA.courses.length;
+
+// ---- hover 幻燈片播放 ----
+{
+  const STEP = 1500;
+  let cur = null, timer = 0, idx = 0, resetT = 0;
+  const parts = c => ({ s:[...c.querySelectorAll(".hs b")], d:[...c.querySelectorAll(".hs-dots i")] });
+  function go(c, next){
+    const { s, d } = parts(c); if (!s.length) return;
+    const prev = s[idx];
+    idx = next % s.length;
+    if (prev && prev !== s[idx]){ prev.classList.remove("on"); prev.classList.add("out"); setTimeout(() => prev.classList.remove("out"), 340); }
+    s[idx].classList.add("on");
+    d.forEach((x, j) => x.classList.toggle("on", j === idx));
+  }
+  function reset(c){
+    const { s, d } = parts(c);
+    s.forEach((x, j) => { x.classList.remove("out"); x.classList.toggle("on", j === 0); });
+    d.forEach((x, j) => x.classList.toggle("on", j === 0));
+  }
+  function start(c){
+    if (cur === c) return;
+    if (cur) stop(cur, true);
+    clearTimeout(resetT); cur = c; idx = 0; reset(c);
+    if (parts(c).s.length > 1) timer = setInterval(() => go(c, idx + 1), STEP);
+  }
+  function stop(c, now){
+    clearInterval(timer); timer = 0;
+    if (cur === c) cur = null;
+    if (now) reset(c); else resetT = setTimeout(() => reset(c), 320);   // 等色塊倒放蓋回去再歸位
+  }
+  document.addEventListener("pointerover", e => { const c = e.target.closest(".hl"); if (c) start(c); });
+  document.addEventListener("pointerout", e => {
+    const c = e.target.closest(".hl"); if (c && !c.contains(e.relatedTarget)) stop(c);
+  });
+  document.addEventListener("focusin", e => { const c = e.target.closest?.(".hl"); if (c) start(c); });
+  document.addEventListener("focusout", e => { const c = e.target.closest?.(".hl"); if (c && !c.contains(e.relatedTarget)) stop(c); });
+}
+
+// ---- 狀態列背景大字 = 這格的數值 ----
+document.querySelectorAll(".strip > div").forEach(cell => {
+  const m = (cell.querySelector("dd")?.textContent || "").match(/\d+/);
+  const wm = cell.querySelector(".wm"); if (wm) wm.textContent = m ? m[0] : "";
+});
+
+// ---- 時間戳 ----
+const gen = new Date(DATA.generated_at);
+const ageH = Math.floor((now - gen) / 3600000);
+const age = ageH < 1 ? "剛剛" : ageH < 48 ? `${ageH} 小時前` : `${Math.floor(ageH/24)} 天前`;
+document.getElementById("stamp").innerHTML = `資料擷取於 ${fmt(gen)}<br>(${age})`;
+
+// ---- 分頁：跳轉, 不捲頁 ----
+const VIEWS = ["home", "courses", "library", "system"];
+const tabs = [...document.querySelectorAll(".tab")];
+function show(id, push){
+  if (!VIEWS.includes(id)) id = "home";
+  for (const v of VIEWS){
+    const el = document.getElementById("v-" + v);
+    const on = v === id;
+    el.classList.toggle("on", on);
+    if (on){ // 重播進場動畫
+      el.querySelectorAll(".rise").forEach(n => { n.classList.remove("rise"); void n.offsetWidth; n.classList.add("rise"); });
+      el.scrollTop = 0;
+    }
+  }
+  tabs.forEach(t => { const on = t.dataset.view === id; t.classList.toggle("on", on); t.setAttribute("aria-current", on ? "page" : "false"); });
+  if (push) { try { history.replaceState(null, "", id === "home" ? " " : "#" + id); } catch (e) {} }
+}
+tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.view, true)));
+addEventListener("hashchange", () => show(location.hash.slice(1), false));
+addEventListener("keydown", e => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (!document.getElementById("modal").hidden) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+  const i = "1234".indexOf(e.key);
+  if (i >= 0) show(VIEWS[i], true);
+});
+show(location.hash.slice(1) || "home", false);
+
+// ---- 滑鼠微傾斜 (只在細指標裝置、且沒開減少動態) ----
+{
+  const fine = matchMedia("(pointer:fine)").matches && !matchMedia("(prefers-reduced-motion:reduce)").matches;
+  if (fine){
+    const els = () => [...document.querySelectorAll("[data-tilt]")].filter(el => el.offsetParent);
+    let raf = 0, mx = -1, my = -1;
+    const tick = () => {
+      raf = 0;
+      for (const el of els()){
+        const r = el.getBoundingClientRect();
+        if (!r.width) continue;
+        const inside = mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom;
+        const dx = (mx - (r.left + r.width / 2)) / (innerWidth / 2);
+        const dy = (my - (r.top + r.height / 2)) / (innerHeight / 2);
+        const k = parseFloat(el.dataset.tilt) || 1;   // data-tilt="0.5" 可以把大面板的幅度調小
+        const amp = (inside ? 2.2 : 0.9) * k;
+        el.style.setProperty("--ry", (Math.max(-1, Math.min(1, dx)) * amp).toFixed(2) + "deg");
+        el.style.setProperty("--rx", (-Math.max(-1, Math.min(1, dy)) * amp).toFixed(2) + "deg");
+        el.style.setProperty("--mx", ((mx - r.left) / r.width * 100).toFixed(1) + "%");
+        el.style.setProperty("--my", ((my - r.top) / r.height * 100).toFixed(1) + "%");
+      }
+    };
+    addEventListener("pointermove", e => { mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(tick); }, { passive:true });
+    document.addEventListener("pointerleave", () => {
+      for (const el of document.querySelectorAll("[data-tilt]")){ el.style.removeProperty("--rx"); el.style.removeProperty("--ry"); }
+    });
+  }
+}
+
+
+// ---- 詳情浮層 (作業 / 信件) ----
+{
+  const ROOT = DATA.root || "";
+  const modal = document.getElementById("modal");
+  const app = document.querySelector(".app");
+  const $ = id => document.getElementById(id);
+  const WD = ["日","一","二","三","四","五","六"];
+  const mmdd = d => `${pad(d.getMonth()+1)}/${pad(d.getDate())}`;
+  const arrow = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h6v6M10 2 3 9"/></svg>`;
+  const spark = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 1v3M6 8v3M1 6h3M8 6h3M2.6 2.6l1.8 1.8M7.6 7.6l1.8 1.8M9.4 2.6 7.6 4.4M4.4 7.6 2.6 9.4"/></svg>`;
+  let current = null, timer = 0, opener = null, closing = 0, group = null, gi = 0;
+
+  // 把 "1. xxx 2. yyy" 擠在一行的題目拆成一行一題
+  const tidy = s => (s || "").replace(/\s+(?=\d{1,2}\s?\.\s?[A-Z(])/g, "\n").trim();
+
+  // ---------- 作業 ----------
+  function assignPrompt(a){
+    const days = Math.floor((a.d - new Date()) / 86400000);
+    return [
+      `我要開始做「${a.course}」的作業「${a.name}」。`,
+      ``,
+      `截止：${fmt(a.d)}（${days >= 0 ? `還剩 ${days} 天` : "已過期"}）`,
+      `繳交狀態：${a.submission || (a.submitted ? "已繳交" : "尚未繳交")}`,
+      `作業頁面：${a.url}`,
+      ``,
+      `作業說明：`,
+      tidy(a.description) || "（e學苑上沒有寫說明，可能在附件或課堂上講的，先幫我看作業頁面和最新一份講義）",
+      ``,
+      `相關資料：`,
+      `- 這門課的資料夾：${ROOT}\\${a.course}`,
+      `- 教材全文索引：${ROOT}\\_moodle\\search.py（python search.py "關鍵字"）`,
+      ``,
+      `請先讀作業說明和相關教材，整理出：要交什麼、評分重點、建議的做法和時間安排，然後問我要從哪一部分開始。`,
+    ].join("\n");
+  }
+  const fileIco = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M3 1h4l2.5 2.5V11H3zM7 1v2.5h2.5"/></svg>`;
+  const dirIco = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h3.5l1 1.2H11V10H1z"/></svg>`;
+  // betterel: 由 _moodle\install_open_local.ps1 註冊, 交給本機的 open_local.ps1 開檔
+  // 一律開新分頁交給系統的 betterel: 處理程式。
+  // 不能在原頁觸發: 瀏覽器會擋 (「這項內容已遭到封鎖」), Claude 桌面版會卡白畫面
+  const localTarget = `target="_blank" rel="noopener"`;
+  const chipText = t => `<span class="mn"><span class="mt">${esc(t)}</span></span><span class="ms" aria-live="polite"></span>`;
+  const localHref = p => "betterel:open?p=" + encodeURIComponent(p);
+  const copyIco = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7"/><path d="M8.5 3.5V1.5h-7v7h2"/></svg>`;
+
+  function tick(){
+    const a = current && current.kind === "assign" ? current.a : null; if (!a) return;
+    const ms = a.d - new Date(), past = ms < 0, t = Math.abs(ms);
+    const dd = Math.floor(t / 86400000), hh = Math.floor(t / 3600000) % 24, mi = Math.floor(t / 60000) % 60, ss = Math.floor(t / 1000) % 60;
+    $("md-count").innerHTML = (past ? `<i style="margin-right:6px">已過期</i>` : "")
+      + (dd ? `<b>${dd}</b><i>天</i>` : "") + `<b>${pad(hh)}</b><i>時</i><b>${pad(mi)}</b><i>分</i>`
+      + (dd ? "" : `<b>${pad(ss)}</b><i>秒</i>`);
+  }
+
+  function fillAssign(a){
+    const c = tone(a.days, a.submitted);
+    const g = modal.querySelector(".glass");
+    g.style.setProperty("--tone", c.t); g.style.setProperty("--tone-soft", c.s);
+    $("md-eyebrow").textContent = `Assignment · ${a.code}`;
+    $("md-course").textContent = a.course;
+    $("md-title").textContent = a.name;
+    $("md-when").innerHTML = `<span>截止</span><b>${fmt(a.d)} (${WD[a.d.getDay()]})</b>`;
+    $("md-pill").textContent = c.label;
+
+    const open = a.open ? new Date(a.open) : null;
+    const start = open || (a.first_seen ? new Date(a.first_seen) : null);
+    $("md-track").hidden = !start;
+    if (start){
+      const pct = Math.max(0, Math.min(1, (Date.now() - start) / (a.d - start)));
+      $("md-open").textContent = open ? `開放 ${mmdd(open)}` : `首次同步到 ${mmdd(start)}`;
+      $("md-due").textContent = `截止 ${mmdd(a.d)}`;
+      $("md-pct").textContent = `已過 ${Math.round(pct * 100)}%`;
+      $("md-fill").style.width = "0"; $("md-now").style.left = "0";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        $("md-fill").style.width = (pct * 100) + "%"; $("md-now").style.left = (pct * 100) + "%";
+      }));
+    }
+    const sub = a.submission || (a.submitted ? "已繳交" : "尚未繳交");
+    $("md-facts").innerHTML = `
+      <div><dt>繳交狀態</dt><dd class="${a.submitted ? "good" : (a.days <= 3 ? "bad" : "")}">${esc(sub)}</dd></div>
+      <div><dt>評分狀態</dt><dd>${esc(a.grading || "—")}</dd></div>
+      <div><dt>開放時間</dt><dd>${open ? esc(fmt(open)) : `<span style="color:var(--muted)">e學苑沒設定</span>`}</dd></div>`;
+    const desc = tidy(a.description);
+    $("md-desc-wrap").hidden = !desc;
+    $("md-desc").textContent = desc;
+    const course = DATA.courses.find(x => x.code === a.code);
+    const mats = course ? course.items.filter(i => ["resource","folder","page"].includes(i.kind)).slice(0, 8) : [];
+    const matDir = `${ROOT}\\${a.course}\\教材`;
+    $("md-mats-wrap").hidden = false;
+    // 有本機檔的教材: 點了複製本機路徑; 沒有本機檔的 (e學苑「頁面」之類) 才連回網路
+    $("md-mats").innerHTML = mats.map(i => i.local
+      ? `<li><a class="mat mc" href="${localHref(i.local)}" ${localTarget} data-local="${esc(i.local)}" title="${esc(i.local)}">${fileIco}${chipText(i.name)}</a></li>`
+      : `<li><a class="mc" href="${i.url}" target="_blank" rel="noopener" title="e學苑上的頁面（不是檔案）">${arrow}${chipText(i.name)}</a></li>`).join("")
+      + `<li><a class="mat mc dir" href="${localHref(matDir)}" ${localTarget} data-local="${esc(matDir)}" title="${esc(matDir)}">${dirIco}${chipText("整個教材資料夾")}</a></li>`;
+    // 量一下哪些檔名放不下: 放不下的 hover 時往左捲到看得到結尾
+    requestAnimationFrame(() => $("md-mats").querySelectorAll(".mn").forEach(mn => {
+      const over = mn.firstElementChild.scrollWidth - mn.clientWidth;
+      mn.classList.toggle("ov", over > 1);
+      if (over > 1){ mn.style.setProperty("--dx", `-${over + 2}px`); mn.style.setProperty("--dur", `${Math.max(.6, over / 45).toFixed(2)}s`); }
+    }));
+
+    const prompt = assignPrompt(a);
+    $("md-prompt").value = prompt; $("md-prompt").hidden = true;
+    $("md-foot").innerHTML = `
+      <button class="btn primary" type="button" id="md-copy">${copyIco} <span>複製 Cowork 起手 prompt</span></button>
+      <a class="btn src" href="${a.url}" target="_blank" rel="noopener"><span class="k">出處</span> e學苑作業頁 ${arrow}</a>
+      <span class="hint">貼到 Cowork 新任務就能開始；工作資料夾選 <b>${esc(ROOT)}</b>，Claude 才讀得到課程講義。</span>`;
+  }
+
+  // ---------- 信件 ----------
+  function fillMail(m){
+    const t = mailTone(m) || { t:"var(--calm)", s:"var(--calm-soft)" };
+    const g = modal.querySelector(".glass");
+    g.style.setProperty("--tone", t.t); g.style.setProperty("--tone-soft", t.s);
+    $("md-eyebrow").textContent = m.bucket === "focus" ? "Mail · 需注意" : "Mail · 校園公告";
+    $("md-course").textContent = m.from;
+    $("md-title").textContent = m.subject;
+    $("mm-facts").innerHTML = `
+      <div><dt>寄件者</dt><dd>${esc(m.from)}<br><span style="color:var(--muted);font-size:12px">${esc(m.addr)}</span></dd></div>
+      <div><dt>收到</dt><dd>${esc(fmt(m.d))}<br><span style="color:var(--muted);font-size:12px">${ago(m.d)}</span></dd></div>
+      <div><dt>附件</dt><dd>${m.atts && m.atts.length ? m.atts.map(esc).join("<br>") : "—"}</dd></div>`;
+    $("mm-todo-wrap").hidden = !m.action;
+    $("mm-todo").textContent = m.action || "";
+    const body = m.summary || m.excerpt || "";
+    $("mm-sum-wrap").hidden = !body;
+    $("mm-sum-h").textContent = m.summary ? "摘要" : "內文開頭";
+    $("mm-sum").textContent = body;
+    $("mm-tags").innerHTML = m.kw.filter(k => M_STRONG.includes(k))
+      .map(k => `<span class="tag ${M_URGENT.includes(k) && inSubj(m, k) ? "t-urgent" : ""}">${esc(k)}</span>`).join("");
+    $("md-prompt").hidden = true;
+    $("md-foot").innerHTML = `
+      <a class="btn primary src-main" href="${m.link}" target="_blank" rel="noopener"><span class="k">出處</span> 在 Gmail 開啟原信 ${arrow}</a>
+      <span class="hint">摘要是每天同步時整理的；附件、連結和完整內容請看原信。</span>`;
+  }
+
+  // ---------- 開 / 關 ----------
+  function paintNav(){
+    const multi = !!(group && group.length > 1);
+    $("md-nav").hidden = !multi;
+    if (multi) $("md-pos").textContent = `${gi + 1} / ${group.length}`;
+  }
+  function step(dir){
+    if (!group || group.length < 2) return;
+    gi = (gi + dir + group.length) % group.length;
+    const g = modal.querySelector(".glass");
+    g.classList.remove("swap-l", "swap-r"); void g.offsetWidth;
+    g.classList.add(dir > 0 ? "swap-l" : "swap-r");
+    current = { kind:"assign", a: dues[group[gi]], m:null };
+    fillAssign(current.a); tick(); paintNav();
+    modal.querySelector(".md-scroll").scrollTop = 0;
+  }
+
+  function openDetail(kind, item, from, grp){
+    clearTimeout(closing); clearInterval(timer);
+    group = kind === "assign" && grp && grp.length > 1 ? grp : null;
+    gi = group ? Math.max(0, group.indexOf(dues.indexOf(item))) : 0;
+    paintNav();
+    current = { kind, a: kind === "assign" ? item : null, m: kind === "mail" ? item : null };
+    opener = from || document.activeElement;
+    $("md-assign").hidden = kind !== "assign";
+    modal.querySelector(".glass").classList.toggle("fixed", kind === "assign");
+    $("md-mail").hidden = kind !== "mail";
+    if (kind === "assign"){ fillAssign(item); tick(); timer = setInterval(tick, 1000); }
+    else fillMail(item);
+    modal.hidden = false; app.inert = true;
+    modal.querySelector(".md-scroll").scrollTop = 0;
+    requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("modal-on")));
+    setTimeout(() => { const b = modal.querySelector(".md-foot .btn"); if (b) b.focus({ preventScroll:true }); }, 60);
+  }
+  function close(){
+    if (modal.hidden) return;
+    document.body.classList.remove("modal-on");
+    clearInterval(timer); app.inert = false;
+    const quick = matchMedia("(prefers-reduced-motion:reduce)").matches;
+    closing = setTimeout(() => { modal.hidden = true; current = null; }, quick ? 0 : 300);
+    if (opener && opener.focus) opener.focus({ preventScroll:true });
+  }
+
+  // 複製 prompt (剪貼簿不給用時, 直接把文字攤開選取)
+  modal.addEventListener("click", async e => {
+    if (e.target.closest("[data-close]")) return close();
+    const mat = e.target.closest("[data-local]");
+    if (mat){                // 連結用 target=_blank 開: 交給系統的 betterel: 處理程式, 不讓頁面本身跳走 (Claude 桌面版會卡白畫面)
+                             // 這裡順手複製路徑當備援
+      const msg = mat.querySelector(".ms");
+      clearTimeout(mat._t);
+      let ok = true;
+      try { await navigator.clipboard.writeText(mat.dataset.local); } catch (err) { ok = false; }
+      msg.textContent = ok ? "已複製路徑" : "開啟中";
+      mat.classList.add("flash");                                   // 提示字留著, 滑鼠移開 (或焦點離開) 才淡出換回檔名
+      return;
+    }
+    const copy = e.target.closest("#md-copy"); if (!copy) return;
+    const box = $("md-prompt");
+    if (current && current.kind === "assign") box.value = assignPrompt(current.a);
+    const label = copy.querySelector("span") || copy;
+    try {
+      await navigator.clipboard.writeText(box.value);
+      label.textContent = "已複製，去 Cowork 貼上";
+      setTimeout(() => { label.textContent = "複製 Cowork 起手 prompt"; }, 1800);
+    } catch (err) {
+      box.hidden = false; box.focus(); box.select();
+      label.textContent = "已選取，按 Ctrl+C 複製";
+    }
+  });
+
+  // 卡片本身不帶網址, 點了只開浮層; 要去原網頁一律走浮層裡的「出處」按鈕
+  document.getElementById("dues").addEventListener("click", e => {
+    const el = e.target.closest(".due"); if (!el) return;
+    openDetail("assign", dues[+el.dataset.idx], el, dues.map((_, i) => i));   // 從任務卡點: 箭頭可切到所有任務; 從日曆點: 只在當天
+  });
+  document.getElementById("tl").addEventListener("click", e => {
+    const cell = e.target.closest(".has"); if (!cell) return;
+    const grp = cell.dataset.group.split(",").map(Number);
+    openDetail("assign", dues[grp[0]], cell, grp);
+  });
+  for (const id of ["mails"]){
+    document.getElementById(id).addEventListener("click", e => {
+      const el = e.target.closest("[data-mi]"); if (!el) return;
+      openDetail("mail", mails[+el.dataset.mi], el);
+    });
+  }
+  const unflash = e => {
+    const m = e.target.closest?.(".mc.flash");
+    if (m && !m.contains(e.relatedTarget)) m.classList.remove("flash");
+  };
+  $("md-mats").addEventListener("pointerout", unflash);
+  $("md-mats").addEventListener("focusout", unflash);
+  $("md-prev").addEventListener("click", () => step(-1));
+  $("md-next").addEventListener("click", () => step(1));
+  addEventListener("keydown", e => {
+    if (modal.hidden) return;
+    if (e.key === "Escape") close();
+    else if (e.key === "ArrowLeft" && group) { e.preventDefault(); step(-1); }
+    else if (e.key === "ArrowRight" && group) { e.preventDefault(); step(1); }
+  }, true);
+
+  // 捲動區: 只有上面真的捲出去才淡化頂端, 還沒到底才淡化底端
+  const edge = el => {
+    el.dataset.top = el.scrollTop > 2 ? "1" : "0";
+    el.dataset.bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 2 ? "1" : "0";
+  };
+  document.querySelectorAll(".scroll").forEach(el => {
+    el.addEventListener("scroll", () => edge(el), { passive:true });
+    new ResizeObserver(() => edge(el)).observe(el);
+    edge(el);
+  });
+}
+</script>
+
+</body></html>

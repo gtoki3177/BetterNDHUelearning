@@ -1,0 +1,32 @@
+# ---- 個人資料：這些永遠不該進 repo ----
+config.ini
+cred.dat
+mail_cred.dat
+*.dat
+state.db
+state.db-*
+latest.json
+mail.json
+log.txt
+mail_log.txt
+open_local_log.txt
+*.part
+_check_imports.py
+
+# 講義 / 作業 (有著作權, 也是個人資料)
+*.pdf
+*.ppt
+*.pptx
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.zip
+!plugins/better-ndhu-elearning/skills/setup/files/brand/*
+
+# 雜項
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+*.plugin

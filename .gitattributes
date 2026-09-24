@@ -1,0 +1,4 @@
+# 保留原始位元組 (PowerShell 5.1 需要 UTF-8 BOM + CRLF)
+*.ps1 -text
+*.vbs -text
+*.png binary
