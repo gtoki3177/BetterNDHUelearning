@@ -40,7 +40,7 @@ foreach ($n in $names) {
 Write-Host ''
 Write-Host '=== log.txt 最後 12 行 ===' -ForegroundColor Cyan
 $log = Join-Path $PSScriptRoot 'log.txt'
-if (Test-Path $log) { Get-Content $log -Tail 12 } else { Write-Host '(還沒有 log.txt)' }
+if (Test-Path $log) { Get-Content $log -Tail 12 -Encoding UTF8 } else { Write-Host '(還沒有 log.txt)' }
 
 Write-Host ''
 Write-Host '--- 常見情況 ---' -ForegroundColor Cyan
