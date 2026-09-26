@@ -1,6 +1,6 @@
 {
   "name": "better-ndhu-elearning",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "description": "BetterNDHUelearning：東華大學 e學苑作業、課程、教材和 gms 信箱整合成每天自動更新的 BetterElearning 儀表板，外加講義全文檢索。",
   "author": {
     "name": "BetterNDHUelearning contributors"

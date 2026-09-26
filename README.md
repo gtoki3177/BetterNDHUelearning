@@ -2,7 +2,7 @@
 
 東華大學 e學苑（Moodle）和 gms 學校信箱的 Claude Cowork 外掛。每天自動整理成一個叫 **BetterElearning** 的儀表板：
 
-- **任務**：待交作業倒數、三週日曆、作業詳情。可以一鍵複製「開始做這份作業」的 Claude prompt，講義路徑已經帶進去。
+- **任務**：待交作業倒數、三週日曆、作業詳情，可以依截止日 / 課程 / 最新加入排序、依繳交狀態篩選；超過三份會變成可以左右拖曳的一排。可以一鍵複製「開始做這份作業」的 Claude prompt，講義路徑已經帶進去。
 - **信箱**：未讀信自動分類（系上 / 課程 / 學校單位 / 校園公告 / 系統通知）。需要注意的信會由 Claude 寫好中文摘要、要做的事和期限。
 - **課程 / 教材**：每門課的活動和講義。講義都會下載到你電腦，建全文索引，直接問 Claude「哪堂課講過 deadlock」就找得到。
 - **推播**：作業 3 天內到期還沒交、有需要注意的新信、同步壞掉時，會推到手機。
@@ -34,7 +34,10 @@ Claude 會問你學號、系所、要不要同步信箱，把程式放進資料�
   mail_sync.py   → IMAP 讀 gms 信箱             → mail.json
                                      │
 Claude 排程 (每天 13:05)             ▼
-  讀 latest.json / mail.json → 替需注意的信寫摘要 → 更新 BetterElearning 儀表板 → 必要時推播
+  讀 latest.json / mail.json → 替需注意的信寫摘要 → 寫進儀表板的頁面資料庫 → 必要時推播
+                                     │
+BetterElearning 儀表板               ▼
+  頁面程式只在範本改版時重新發佈；資料從自己的資料庫讀，開著時排程一寫進去就會自己更新
 ```
 
 抓資料全部在你自己的電腦上跑，原因有兩個：
@@ -49,7 +52,7 @@ Claude 排程 (每天 13:05)             ▼
 | e學苑密碼、Gmail 應用程式密碼（Windows DPAPI 加密，換帳號或換電腦都解不開） | `latest.json`：課程、作業、教材清單、同步時間 |
 | 講義檔案本身（除非你叫 Claude 去讀） | `mail.json`：最近 14 天信件的寄件者、主旨、內文前 1200 字 |
 
-儀表板是你 claude.ai 帳號下的私人頁面，除非你自己分享，不然別人看不到。
+儀表板是你 claude.ai 帳號下的私人頁面，除非你自己分享，不然別人看不到。資料放在頁面自己的資料庫裡，只有你（和替你跑排程的 Claude）寫得進去；分享出去的人只能看。
 
 不想讓某些信給 Claude 讀，有兩種做法：
 
@@ -64,6 +67,22 @@ Claude 排程 (每天 13:05)             ▼
 - **exe 等其他檔案**：只會在檔案總管裡標出來，一律不執行。
 - **在哪裡能用**：只在 Chrome / Edge 開儀表板時有效。Claude 桌面版裡點了只會複製路徑。
 - **移除**：`powershell -ExecutionPolicy Bypass -File .\install_open_local.ps1 -Uninstall`
+
+## 本機即時模式（選用，實驗性）
+
+儀表板平常顯示每天排程存進去的快照。想在同步腳本跑完的當下就看到，可以在 `_moodle` 執行 `install_mcp.ps1`（先完全關掉 Claude 桌面版）：它會把 `betterel_mcp.py` 註冊成桌面版的本機 MCP server，之後在**桌面版**裡開儀表板，右上角會顯示「即時・本機」，直接讀你電腦上的 `latest.json` / `mail.json`。
+
+- `betterel_mcp.py` 只讀那兩個檔，不寫檔、不連網路；閒著時幾乎不吃資源。
+- 手機、一般瀏覽器讀不到你的電腦，照樣顯示快照。信件摘要還是每日排程寫的。
+- 頁面需要「可以讀 `host:betterel`」的權限，這個權限只能在跑在你電腦上的 Claude session 裡發佈時加上（雲端 session，包括每日排程，都會被拒絕）。沒有這個權限時頁面照常運作，只是用每日更新的資料。
+- 移除：`powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1 -Remove`
+
+## 更新外掛
+
+這個 repo 更新後，在 Cowork 的外掛設定更新 **better-ndhu-elearning**：
+
+- **儀表板**：不用做任何事。下一次每日更新時，Claude 發現外掛裡的範本比你的頁面新，會自動換成新版，作業、信件摘要這些資料都會保留。（從 0.2 以前升上來的頁面，這次會順便開好頁面資料庫，之後每天只更新資料、不再重新發佈頁面。）
+- **電腦上的程式**（`_moodle` 裡的 `.py` / `.ps1`）：跟 Claude 說「更新 BetterNDHUelearning 的程式」，它會只換程式檔，不動你的 `config.ini` 和資料。
 
 ## 常見問題
 
@@ -83,6 +102,7 @@ Claude 排程 (每天 13:05)             ▼
 plugins/better-ndhu-elearning/
   skills/setup/            安裝流程；files/ 是會被複製到使用者 _moodle 資料夾的程式
   skills/daily-update/     每日更新流程；scripts/build.py 產生儀表板；assets/dashboard.html 是範本
+                           (改了範本記得調高裡面的 TEMPLATE_VERSION，使用者的頁面才會自動升級)
   skills/search-materials/ 講義全文檢索
 ```
 

@@ -8,16 +8,31 @@ moodle_sync.py, mail.json from mail_sync.py), plus config.ini, and produces the
 dashboard HTML by replacing the `const DATA = {...}` and `const MAIL = {...}`
 blocks. Nothing else in the page is touched.
 
-Typical daily run (two passes):
+Typical daily run since 0.3 (the page reads its data from its own artifact
+database, so the HTML is NOT republished every day):
 
-    python build.py --page current.html --latest latest.json --mail mail.json \
-        --config config.ini --out new.html --report report.json
+    # prev/ = the page database's dashboard/data and dashboard/mail documents
+    #         (ArtifactData get ... out_dir=prev); may be empty on the first run
+    python build.py --prev-dir prev --latest latest.json --mail mail.json \
+        --config config.ini --db-out db --report report.json
     # -> read report.json; for each entry in need_summary write a summary into summ.json
-    python build.py ... --summaries summ.json --out new.html --report report.json
+    python build.py ... --summaries summ.json --db-out db --report report.json
+    # -> write db/data.json and db/mail.json to dashboard/data and dashboard/mail
+    # -> only if report.json says "republish": also pass --page current.html --out new.html
+    #    (or --template for a first run) and publish that HTML
+
+Older style (data embedded in the HTML only) still works: --page ... --out new.html.
 
 First run (no dashboard yet): pass --template assets/dashboard.html instead of --page.
 To move an existing dashboard onto a newer template while keeping its data:
 pass both --template (new code) and --page (old page, for carried-over fields).
+
+Automatic template upgrade: with --page and no --template, if this plugin's
+assets/dashboard.html has a higher `const TEMPLATE_VERSION = "x.y.z"` than the
+page (a page without the marker counts as 0), the page code is replaced by the
+bundled template and the data is carried over as usual. report.json then has
+"template_upgraded": {"from": ..., "to": ...}. Pass --no-upgrade to keep the
+page's own code.
 
 Carried over from the previous page (--page):
   - assignment first_seen (by url)
@@ -85,6 +100,55 @@ def block(html, name):
                     break
         j += 1
     return i, j, json.loads(html[i:j])
+
+
+BUNDLED_TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "dashboard.html"
+
+
+def template_version(html):
+    m = re.search(r'const TEMPLATE_VERSION = "(\d+(?:\.\d+)*)"', html)
+    return m.group(1) if m else "0"
+
+
+def vtuple(v):
+    return tuple(int(x) for x in v.split("."))
+
+
+def read_doc(p):
+    """A document saved by `ArtifactData get/list out_dir=...`, or a plain JSON object.
+    Unwraps a {"data": {...}, "version": n, ...} envelope if the file has one."""
+    obj = read_json(p)
+    if isinstance(obj, dict) and isinstance(obj.get("data"), dict) and "generated_at" not in obj \
+            and ("version" in obj or "id" in obj or "doc_id" in obj or "path" in obj):
+        obj = obj["data"]
+    return obj if isinstance(obj, dict) and obj.get("generated_at") else None
+
+
+def find_doc(d, name):
+    for cand in (Path(d) / "dashboard" / f"{name}.json", Path(d) / f"{name}.json"):
+        if cand.exists():
+            return read_doc(cand)
+    return None
+
+
+DOC_LIMIT = 240 * 1024     # 資料庫單一文件上限是 256 KiB, 留一點空間
+
+
+def fit_mail(mail, noise_addr):
+    """信件文件太大時, 先拿掉系統通知、再拿掉校園公告的開頭摘錄 (摘要/要做的事都留著)."""
+    size = lambda: len(json.dumps(mail, ensure_ascii=False).encode("utf-8"))
+    trimmed = 0
+    for level in ("noise", "bulk"):
+        if size() <= DOC_LIMIT:
+            break
+        for r in mail["messages"]:
+            if bucket(r, noise_addr) == level and r.get("excerpt"):
+                r["excerpt"] = ""
+                trimmed += 1
+    while size() > DOC_LIMIT and mail["messages"]:
+        mail["messages"].pop()             # 最後手段: 丟最舊的 (messages 由新到舊)
+        trimmed += 1
+    return trimmed
 
 
 def put(html, name, obj):
@@ -248,28 +312,61 @@ def main():
     ap.add_argument("--mail", help="mail.json")
     ap.add_argument("--config", help="config.ini")
     ap.add_argument("--summaries", help="JSON {uid: {summary, action, flash}}")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--prev-dir", help="dir with the page database's dashboard/data.json and dashboard/mail.json")
+    ap.add_argument("--db-out", help="write data.json / mail.json (page database documents) into this dir")
+    ap.add_argument("--out", help="write the dashboard HTML here (needs --page or --template)")
     ap.add_argument("--report", required=True)
+    ap.add_argument("--no-upgrade", action="store_true",
+                    help="keep the page's own code even if the bundled template is newer")
     a = ap.parse_args()
 
-    if not (a.page or a.template):
-        sys.exit("need --page or --template")
-    shell = Path(a.template or a.page).read_text(encoding="utf-8")
-    prev_html = Path(a.page).read_text(encoding="utf-8") if a.page else shell
-    _, _, PD = block(prev_html, "DATA")
-    _, _, PM = block(prev_html, "MAIL")
+    if not (a.page or a.template or a.prev_dir):
+        sys.exit("need --prev-dir, --page or --template")
+    if a.out and not (a.page or a.template):
+        sys.exit("--out needs --page or --template")
+    if not (a.out or a.db_out):
+        sys.exit("need --out and/or --db-out")
+    bundled = BUNDLED_TEMPLATE.read_text(encoding="utf-8") if BUNDLED_TEMPLATE.exists() else None
+    shell = Path(a.template or a.page).read_text(encoding="utf-8") if (a.template or a.page) else None
+    prev_html = Path(a.page).read_text(encoding="utf-8") if a.page else (shell if a.template else None)
+    upgraded = None
+    if a.page and not a.template and not a.no_upgrade and bundled:
+        old_v, new_v = template_version(prev_html), template_version(bundled)
+        if vtuple(new_v) > vtuple(old_v):
+            shell, upgraded = bundled, {"from": old_v, "to": new_v}
+
+    # 上一版的資料: 頁面資料庫優先, 沒有才用頁面內嵌的
+    PD = find_doc(a.prev_dir, "data") if a.prev_dir else None
+    PM = find_doc(a.prev_dir, "mail") if a.prev_dir else None
+    if prev_html:
+        _, _, HD = block(prev_html, "DATA")
+        _, _, HM = block(prev_html, "MAIL")
+        newer = lambda x, y: bool(x and x.get("generated_at")) and (not y or not y.get("generated_at")
+                                                                    or x["generated_at"] >= y["generated_at"])
+        PD = PD if newer(PD, HD) else HD
+        PM = PM if newer(PM, HM) else HM
+    PD = PD or {}
+    PM = PM or {}
+    page_version = template_version(shell) if shell else (PD.get("template_version") or "0")
 
     cfg = load_config(a.config)
     L = read_json(a.latest)
     M = read_json(a.mail)
     summ = read_json(a.summaries) or {}
 
-    data = build_data(L, PD, cfg) if L else PD
-    mail = build_mail(M, PM, cfg, summ) if M else PM
+    data = build_data(L, PD, cfg) if L else dict(PD)
+    mail = build_mail(M, PM, cfg, summ) if M else dict(PM)
+    if not data.get("generated_at") and not mail.get("generated_at"):
+        sys.exit("no data: latest.json / mail.json missing and nothing to carry over")
     now = datetime.now(TZ)
 
     # ---- report ----
     report = {"latest_found": L is not None, "mail_found": M is not None}
+    if upgraded:
+        report["template_upgraded"] = upgraded
+    if not a.out and bundled and not a.no_upgrade and vtuple(template_version(bundled)) > vtuple(page_version):
+        # 只寫資料庫的跑法: 頁面程式比外掛裡的範本舊 → 這次要順便重新發佈
+        report["republish"] = {"reason": "template", "from": page_version, "to": template_version(bundled)}
     if L:
         prev_urls = {x["url"] for x in PD.get("assignments", [])}
         pend = []
@@ -307,8 +404,26 @@ def main():
         for r in mail["messages"]:
             r.pop("_new", None); r.pop("_body", None)
 
-    out = put(put(shell, "DATA", data), "MAIL", mail)
-    Path(a.out).write_text(out, encoding="utf-8")
+    written = datetime.now(TZ).isoformat(timespec="seconds")
+    if a.db_out:
+        noise_addr = NOISE_ADDR + cfg["noise"]
+        d = Path(a.db_out); d.mkdir(parents=True, exist_ok=True)
+        ddoc = {**data, "written_at": written,
+                "template_version": template_version(shell) if (shell and a.out) else page_version}
+        mdoc = {**mail, "written_at": written}
+        if mail.get("messages") is not None:
+            t = fit_mail(mdoc, noise_addr)
+            if t:
+                report["mail_trimmed"] = t
+        (d / "data.json").write_text(json.dumps(ddoc, ensure_ascii=False), encoding="utf-8")
+        (d / "mail.json").write_text(json.dumps(mdoc, ensure_ascii=False), encoding="utf-8")
+        for name, doc in (("data", ddoc), ("mail", mdoc)):
+            n = len(json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+            if n > 256 * 1024:
+                report.setdefault("doc_too_big", {})[name] = n
+    if a.out:
+        out = put(put(shell, "DATA", data), "MAIL", mail)
+        Path(a.out).write_text(out, encoding="utf-8")
     Path(a.report).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({k: (len(v) if isinstance(v, list) else v) for k, v in report.items()}, ensure_ascii=False))
 

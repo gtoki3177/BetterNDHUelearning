@@ -180,7 +180,7 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 .rise{animation:rise .32s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i,0) * 32ms)}
 .lift{transition:transform .16s ease, border-color .16s ease, background .16s ease}
 .lift:hover{transform:translateY(-1px)}
-@keyframes breathe{0%,100%{box-shadow:inset 3px 0 0 var(--tone)}50%{box-shadow:inset 3px 0 0 var(--tone), 0 0 0 1px var(--tone-soft), 0 0 18px -6px var(--tone)}}
+@keyframes breathe{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 1px var(--tone-soft), 0 0 18px -6px var(--tone)}}
 .due[data-urgent="1"]{animation:breathe 2.6s ease-in-out infinite}
 
 /* ---------- 期限帶 ---------- */
@@ -217,20 +217,44 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 .tl .today .dn{color:var(--accent);font-weight:600;opacity:1}
 
 /* ---------- 作業列 ---------- */
-.due-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px;margin:0;padding:0;list-style:none}
-.due{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;gap:2px 12px;align-items:start;
+/* 任務卡: 固定寬度 = 一排剛好三張; 超過三張橫向捲動 (可以拖曳, 下面出現捲軸) */
+.due-list{--gap:8px;display:flex;align-items:stretch;gap:var(--gap);
+  margin:-6px -6px;padding:6px;list-style:none;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;
+  scroll-snap-type:x proximity;scroll-padding:6px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.due-list > li{flex:0 0 calc((100% - 2 * var(--gap)) / 3);scroll-snap-align:start;min-width:0}
+.due-list.scrollx{padding-bottom:12px;cursor:grab}
+.due-list.scrollx.dragging{cursor:grabbing;scroll-snap-type:none;user-select:none}
+.due-list.scrollx.dragging .due{pointer-events:none}
+.due-list:focus:not(:focus-visible), .due-list.dragging{outline:none}
+.due-list:focus-visible{outline-offset:-2px}
+.due-list::-webkit-scrollbar{height:6px}
+.due-list::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.due-list::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+@media (max-width:760px){ .due-list > li{flex-basis:78%} }
+.due{display:flex;flex-direction:column;gap:7px;align-items:stretch;
   background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--radius);
-  padding:10px 12px 11px;text-decoration:none;box-shadow:inset 3px 0 0 var(--tone,var(--calm));height:100%}
+  padding:10px 12px 11px 15px;text-decoration:none;height:100%;min-height:118px}
 .due:hover{border-color:var(--tone,var(--accent))}
-.due .cd{grid-row:1 / span 2;display:flex;flex-direction:column;align-items:center;min-width:44px;padding-top:1px}
-.due .cd b{font-family:var(--f-mono);font-size:26px;line-height:1;font-variant-numeric:tabular-nums;color:var(--tone,var(--ink))}
-.due .cd i{font-style:normal;font-size:10.5px;color:var(--muted);margin-top:2px}
-.due .what{display:block;font-family:var(--f-display);font-size:14.5px;font-weight:600;line-height:1.3;
+/* 第一列: 課名 + 急迫度 */
+.due .top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.due .crs{font-size:11.5px;color:var(--muted);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.due .state{flex:none;font-size:10.5px;padding:1px 8px;border-radius:100px;white-space:nowrap;
+  background:var(--tone-soft,var(--calm-soft));color:var(--tone,var(--calm))}
+/* 第二列: 作業名 */
+.due .what{font-family:var(--f-display);font-size:15px;font-weight:600;line-height:1.3;
   overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.due .meta{display:block;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.due .meta b{font-family:var(--f-mono);font-weight:400;color:var(--ink-2)}
-.due .state{grid-column:2;justify-self:start;font-size:10.5px;padding:1px 8px;border-radius:100px;white-space:nowrap;
-  background:var(--tone-soft,var(--calm-soft));color:var(--tone,var(--calm));margin-top:3px}
+/* 第三列: 時間進度條 + 倒數 / 截止時間 + 繳交狀態 (右下) */
+.due .prog{margin-top:auto;position:relative;height:2px;background:var(--line-soft);overflow:hidden}
+.due .prog i{position:absolute;inset:0 auto 0 0;background:var(--tone,var(--calm))}
+.due .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.due .cd{display:flex;align-items:baseline;gap:3px;min-width:0;white-space:nowrap}
+.due .cd b{font-family:var(--f-mono);font-size:22px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums;color:var(--tone,var(--ink))}
+.due .cd i{font-style:normal;font-size:11px;color:var(--muted)}
+.due .when{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-2);margin-left:7px;overflow:hidden;text-overflow:ellipsis}
+.due .sub{flex:none;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.due .sub::before{content:"";width:7px;height:7px;border-radius:50%;border:1.5px solid currentColor}
+.due .sub.ok{color:var(--accent)}
+.due .sub.ok::before{background:currentColor}
 .quiet{font-size:13px;color:var(--muted);font-style:italic}
 
 /* ---------- 信件列 ---------- */
@@ -238,7 +262,7 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 @media (min-width:900px){ .mails{grid-template-columns:repeat(2,minmax(0,1fr))} }
 .mail{display:grid;grid-template-columns:52px minmax(0,1fr);gap:1px 12px;align-items:baseline;
   background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--radius);
-  padding:8px 12px;text-decoration:none;box-shadow:inset 3px 0 0 var(--tone,transparent)}
+  padding:8px 12px 8px 15px;text-decoration:none}
 .mail:hover{border-color:var(--tone,var(--accent))}
 .mail .ago{font-family:var(--f-mono);font-size:11px;color:var(--muted);white-space:nowrap}
 .mail .who{font-size:11.5px;color:var(--muted);grid-column:2}
@@ -307,7 +331,7 @@ code{font-family:var(--f-mono);font-size:12px;background:var(--surface-2);paddin
 
 @media (prefers-reduced-motion:reduce){
   .rise{animation:none}
-  .due[data-urgent="1"]{animation:none;box-shadow:inset 3px 0 0 var(--tone)}
+  .due[data-urgent="1"]{animation:none;box-shadow:none}
   .lift, .fold, .holo, .view, .tab{transition:none}
   .holo{transform:none}
 }
@@ -325,6 +349,11 @@ code{font-family:var(--f-mono);font-size:12px;background:var(--surface-2);paddin
 .hl{position:relative;overflow:hidden;isolation:isolate;
   --sw-in:170ms; --sw-out:120ms;
   transition:background-color 0s var(--sw-out), border-color 0s var(--sw-out), box-shadow 0s var(--sw-out), transform .16s ease}
+/* 左邊的色條: 放在最底層 (z-index 0), hover 一開始就藏起來, 所以閃切動畫不會被它穿透; 移開時跟底色一起回來 */
+.hl::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;z-index:0;pointer-events:none;
+  background:var(--tone,transparent);transition:visibility 0s var(--sw-out)}
+.due.hl::before{background:var(--tone,var(--calm))}
+.hl:is(:hover,:focus-visible)::before{visibility:hidden;transition:visibility 0s 0s}
 .fx{position:absolute;inset:0;z-index:3;pointer-events:none}
 .fx i{position:absolute;inset:0;--p:0;
   clip-path:inset(0 calc(max(0, 1 - var(--p) / .35) * 100%) 0 calc(max(0, (var(--p) - .65) / .35) * 100%));
@@ -339,9 +368,9 @@ code{font-family:var(--f-mono);font-size:12px;background:var(--surface-2);paddin
 
 .hl:is(:hover,:focus-visible){background:var(--accent);border-color:var(--accent);box-shadow:none;animation:none;
   transition:background-color 0s var(--sw-in), border-color 0s var(--sw-in), box-shadow 0s var(--sw-in), transform .16s ease}
-.hl :is(.ago,.who,.subj,.what,.meta,.meta b,.cd b,.cd i,.tag,.state){
+.hl :is(.ago,.who,.subj,.what,.meta,.meta b,.cd b,.cd i,.crs,.when,.sub,.tag,.state){
   transition:color 0s var(--sw-out), background-color 0s var(--sw-out), opacity 0s var(--sw-out)}
-.hl:is(:hover,:focus-visible) :is(.ago,.who,.subj,.what,.meta,.meta b,.cd b,.cd i){color:var(--accent-ink);
+.hl:is(:hover,:focus-visible) :is(.ago,.who,.subj,.what,.meta,.meta b,.cd b,.cd i,.crs,.when,.sub){color:var(--accent-ink);
   transition:color 0s var(--sw-in), opacity 0s var(--sw-in)}
 .hl:is(:hover,:focus-visible) :is(.tag,.state){color:var(--accent-ink);background:rgba(0,0,0,.16);
   transition:color 0s var(--sw-in), background-color 0s var(--sw-in)}
@@ -490,6 +519,18 @@ button.due, button.mail{appearance:none;font:inherit;color:inherit;text-align:le
 .swap-r :is(.md-head .t, .md-scroll){animation:swapR .22s cubic-bezier(.2,.7,.2,1)}
 @media (prefers-reduced-motion:reduce){ .swap-l :is(.md-head .t,.md-scroll), .swap-r :is(.md-head .t,.md-scroll){animation:none} }
 
+/* ---------- 任務：排序 + 篩選 (放在標題列右邊) ---------- */
+#band > .ph{align-items:center;row-gap:8px}
+.ttools{margin:0;flex:1 1 auto;gap:6px 10px}
+.ttools .seg button{padding:4px 10px;font-size:12px}
+.ttools .chip{padding:3px 9px 3px 7px;font-size:12px}
+#dues .quiet{flex:1 1 100%;padding:14px 4px}
+/* ---------- 資料來源 (即時 / 快照) ---------- */
+.src{display:inline-block;font-family:var(--f-body);font-size:10.5px;letter-spacing:.04em;padding:0 7px;margin-left:6px;
+  border:1px solid var(--line);color:var(--muted);vertical-align:1px}
+.src.live{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.src.warn{border-color:var(--soon);color:var(--soon)}
+
 /* ---------- 信箱：排序 + 篩選 ---------- */
 .mtools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:-2px}
 .seg{display:inline-flex;border:1px solid var(--line);background:var(--ground-2)}
@@ -580,9 +621,23 @@ button.due, button.mail{appearance:none;font:inherit;color:inherit;text-align:le
         <div><span class="wm" aria-hidden="true"></span><dt>已索引教材</dt><dd class="num" id="s-index">0</dd></div>
       </dl>
 
-      <section class="holo" id="band" data-tilt="0.45">
+      <section class="holo" id="band" data-tilt="0.4" data-tilt-group="focus">
         <span class="wm" aria-hidden="true">任務</span>
-        <header class="ph"><h2>任務</h2></header>
+        <header class="ph"><h2>任務</h2>
+          <div class="mtools ttools">
+            <div class="seg" role="radiogroup" aria-label="任務排序" id="tf-sort">
+              <button type="button" role="radio" data-tsort="due">截止日</button>
+              <button type="button" role="radio" data-tsort="course">課程</button>
+              <button type="button" role="radio" data-tsort="new">最新加入</button>
+            </div>
+            <div class="seg" role="radiogroup" aria-label="繳交狀態" id="tf-state">
+              <button type="button" role="radio" data-tstate="all">全部</button>
+              <button type="button" role="radio" data-tstate="todo">未繳交</button>
+              <button type="button" role="radio" data-tstate="done">已繳交</button>
+            </div>
+            <label class="only" for="tf-past"><input type="checkbox" id="tf-past"> 隱藏已過期</label>
+          </div>
+        </header>
         <div class="band-body">
           <ul class="due-list" id="dues"></ul>
           <div class="tl" id="tl" aria-label="這週起三週"></div>
@@ -590,11 +645,11 @@ button.due, button.mail{appearance:none;font:inherit;color:inherit;text-align:le
       </section>
       <p class="band-empty" id="band-empty" hidden><i></i><b>沒有待交的作業</b>下次同步有新的會出現在這裡</p>
 
-      <section class="holo grow" data-tilt="0.6">
+      <section class="holo grow" data-tilt="0.4" data-tilt-group="focus">
         <span class="wm" aria-hidden="true">信箱</span>
         <header class="ph"><h2>信箱</h2></header>
         <div class="mtools">
-          <div class="seg" role="radiogroup" aria-label="排序">
+          <div class="seg" role="radiogroup" aria-label="排序" id="mf-sort">
             <button type="button" role="radio" data-sort="time" aria-checked="true">依時間</button>
             <button type="button" role="radio" data-sort="rank" aria-checked="false">依重要性</button>
           </div>
@@ -632,7 +687,8 @@ button.due, button.mail{appearance:none;font:inherit;color:inherit;text-align:le
         <p>資料全部來自你電腦上的同步程式：課程和作業是 <code>moodle_sync.py</code> 寫的 <code>latest.json</code>，信箱是 <code>mail_sync.py</code> 用 IMAP 讀 gms 信箱寫的 <code>mail.json</code>。這頁只放未讀信的寄件者、主旨、開頭一小段，以及「需注意」信件的摘要，完整內文留在你電腦裡。</p>
         <p>每天 Claude 的排程會把兩份檔案讀進來更新這頁；電腦沒開那天就不會更新，右上角的時間戳會告訴你資料是幾號的。同步程式有沒有在跑，可以在 <code>_moodle</code> 資料夾執行 <code>check_task.ps1</code> 看。</p>
         <p>分頁可以用鍵盤 <code>1</code>–<code>4</code> 切換；信箱的排序和篩選會記在這台瀏覽器。點作業或信件會開詳情浮層，要去原網頁用浮層裡的「出處」按鈕；作業浮層可以用 ← → 切換。</p>
-        <div id="sys-err"></div>
+        <p id="sys-live"></p>
+        <div id="sys-err" style="display:contents"></div>
         <p class="mail-foot" id="sys-mail"></p>
       </section>
     </div>
@@ -694,6 +750,9 @@ button.due, button.mail{appearance:none;font:inherit;color:inherit;text-align:le
 </div>
 
 <script>
+// 範本版本: daily-update 的 build.py 看到外掛裡的範本比這個新, 就會自動把頁面換成新範本 (資料沿用)
+const TEMPLATE_VERSION = "0.3.0";
+
 // ↓ 每天由 daily-update 技能 (scripts/build.py) 整個換掉, 別手動改
 const DATA = {
     "generated_at": "2026-01-01T00:00:00+08:00",
@@ -727,8 +786,17 @@ const MAIL = {
     "errors": []
   };
 
-// ---- 從資料填頁面上的固定欄位 ----
-{
+// 資料來源 (新的蓋舊的):
+//   1. DATA / MAIL      發佈頁面時內嵌的快照 (build.py 只換這兩塊), 什麼都讀不到時的備援
+//   2. 頁面資料庫         每日排程寫進 dashboard/data、dashboard/mail, 頁面不用重新發佈, 開著也會即時更新
+//   3. 本機 betterel     在 Claude 桌面版、而且頁面有 host:betterel 權限時, 直接讀電腦上的同步結果
+// BASE = 1 和 2 裡比較新的那份; CUR = 畫面實際顯示的 (有 3 就是 3 疊在 BASE 上)。
+let BASE_D = DATA, BASE_M = MAIL;
+let CUR_D = DATA, CUR_M = MAIL;
+
+// ---- 從資料填頁面上的固定欄位 (學期、教材索引、同步錯誤) ----
+function renderFixed(){
+  const DATA = CUR_D, MAIL = CUR_M;
   const ix = DATA.index || { files:0, chunks:0, courses:[] };
   document.getElementById("term").textContent = DATA.semester || "";
   document.getElementById("t-files").textContent = ix.files || 0;
@@ -763,7 +831,7 @@ function tone(days, submitted){
   return { t:"var(--calm)", s:"var(--calm-soft)", label:"還有時間" };
 }
 
-const now = new Date();
+let now = new Date();
 
 // ---- hover 大字幻燈片 ----
 // 字寬估算: 中日韓算 1, 其他算 0.62, 讓每張都盡量撐滿卡片寬
@@ -776,22 +844,46 @@ const slidesHTML = arr => {
     ${list.length > 1 ? `<span class="hs-dots">${list.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</span>` : ""}</span>`;
 };
 
-// ---- 期限 ----
-const dues = DATA.assignments
-  .map(a => { const d = new Date(a.due); return { ...a, d, days: Math.floor((d - now) / 86400000) }; })
-  .sort((x, y) => x.d - y.d);
+// ---- 任務：資料 / 排序 / 篩選 ----
+let dues = [], shown = [];
+const TF_KEY = "task-filter-v1";
+const tf = { sort:"due", state:"all", hidePast:false };
+try { Object.assign(tf, JSON.parse(localStorage.getItem(TF_KEY) || "{}")); } catch (e) {}
+const saveTF = () => { try { localStorage.setItem(TF_KEY, JSON.stringify(tf)); } catch (e) {} };
+const TSORT = {
+  due:    (x, y) => x.d - y.d,
+  course: (x, y) => x.course.localeCompare(y.course, "zh-Hant") || (x.d - y.d),
+  new:    (x, y) => (new Date(y.first_seen || 0) - new Date(x.first_seen || 0)) || (x.d - y.d),
+};
+function computeDues(){
+  dues = CUR_D.assignments
+    .map(a => { const d = new Date(a.due); return { ...a, d, days: Math.floor((d - now) / 86400000) }; })
+    .sort(TSORT.due);
+}
+const passState = a => !(tf.state === "todo" && a.submitted) && !(tf.state === "done" && !a.submitted) && !(tf.hidePast && a.days < 0);
+const taskVisible = passState;
 
-const list = document.getElementById("dues");
-document.getElementById("band").hidden = !dues.length;      // 沒作業就整條收起
-document.getElementById("band-empty").hidden = !!dues.length;
-if (dues.length){
-  list.innerHTML = dues.map((a, i) => {
+function renderTaskTools(){
+  document.querySelectorAll("#tf-sort [data-tsort]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.tsort === tf.sort)));
+  document.querySelectorAll("#tf-state [data-tstate]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.tstate === tf.state)));
+  document.getElementById("tf-past").checked = tf.hidePast;
+}
+
+function renderTasks(){
+  const list = document.getElementById("dues");
+  document.getElementById("band").hidden = !dues.length;      // 完全沒作業就整條收起
+  document.getElementById("band-empty").hidden = !!dues.length;
+  shown = dues.filter(taskVisible).sort(TSORT[tf.sort] || TSORT.due);
+  list.innerHTML = shown.length ? shown.map((a, i) => {
     const c = tone(a.days, a.submitted);
     const n = Math.abs(a.days);
     const when = `${pad(a.d.getMonth()+1)}/${pad(a.d.getDate())} ${pad(a.d.getHours())}:${pad(a.d.getMinutes())}`;
     const urgent = !a.submitted && a.days >= 0 && a.days <= 3 ? 1 : 0;
+    const st = a.open ? new Date(a.open) : (a.first_seen ? new Date(a.first_seen) : null);
+    const pct = st && a.d > st ? Math.max(0, Math.min(1, (now - st) / (a.d - st))) : null;
+    const wk = "日一二三四五六"[a.d.getDay()];
     return `<li class="rise" style="--i:${i+2}"><button type="button" class="due lift hl"
-        title="${esc(a.name)} — ${fmt(a.d)} 截止" data-urgent="${urgent}" data-idx="${i}"
+        title="${esc(a.name)} — ${fmt(a.d)} 截止" data-urgent="${urgent}" data-idx="${dues.indexOf(a)}"
         style="--tone:${c.t};--tone-soft:${c.s}">
       <span class="fx" aria-hidden="true"><i></i><i></i><i></i></span>
       ${slidesHTML([
@@ -801,27 +893,31 @@ if (dues.length){
         when,
         a.submitted ? "已繳交" : "還沒交",
       ])}
-      <span class="cd"><b>${n}</b><i>${a.days < 0 ? "天前" : "天"}</i></span>
-      <span>
-        <span class="what">${esc(a.name)}</span>
-        <span class="meta">${esc(a.course)} · <b>${when}</b> 截止 · ${a.submitted ? "已繳交" : "未繳交"}</span>
+      <span class="top"><span class="crs">${esc(a.course)}</span>${a.submitted ? "" : `<span class="state">${c.label}</span>`}</span>
+      <span class="what">${esc(a.name)}</span>
+      <span class="prog" ${pct === null ? "hidden" : ""} title="${pct === null ? "" : `時間已過 ${Math.round(pct * 100)}%`}"><i style="width:${((pct || 0) * 100).toFixed(1)}%"></i></span>
+      <span class="foot">
+        <span class="cd"><b>${n}</b><i>${a.days < 0 ? "天前" : "天"}</i><span class="when">${pad(a.d.getMonth()+1)}/${pad(a.d.getDate())} 週${wk} ${pad(a.d.getHours())}:${pad(a.d.getMinutes())}</span></span>
+        <span class="sub ${a.submitted ? "ok" : ""}">${a.submitted ? "已繳交" : "未繳交"}</span>
       </span>
-      <span class="state">${c.label}</span>
     </button></li>`;
-  }).join("");
+  }).join("") : `<li class="quiet">這個篩選條件下沒有作業。</li>`;
+  list.classList.toggle("scrollx", shown.length > 3);      // 超過三張才出現捲軸 / 可拖曳
+  list.scrollLeft = 0;
 
-  const next = dues.find(a => !a.submitted && a.days >= 0) || dues[0];
-  const nt = tone(next.days, next.submitted);
+  // 狀態列: 永遠看全部作業, 不受篩選影響
   const nextCell = document.getElementById("s-next").parentElement;
-  nextCell.style.setProperty("--tone", nt.t);
-  nextCell.style.setProperty("--tone-soft", nt.s);
-  if (next.days <= 7) nextCell.dataset.tone = "1";
-  document.getElementById("s-next").innerHTML = `${Math.abs(next.days)} <small>天後 · ${esc(next.course)}</small>`;
+  const next = dues.find(a => !a.submitted && a.days >= 0) || dues[0];
+  if (next){
+    const nt = tone(next.days, next.submitted);
+    nextCell.style.setProperty("--tone", nt.t);
+    nextCell.style.setProperty("--tone-soft", nt.s);
+    if (next.days <= 7) nextCell.dataset.tone = "1"; else delete nextCell.dataset.tone;
+    document.getElementById("s-next").innerHTML = `${Math.abs(next.days)} <small>天後 · ${esc(next.course)}</small>`;
+  } else { delete nextCell.dataset.tone; document.getElementById("s-next").textContent = "—"; }
   document.getElementById("s-pending").textContent = dues.filter(a => !a.submitted).length;
-}
 
-// ---- 日曆: 這週起三週, 一排一禮拜 (週一開頭) ----
-{
+  // 日曆: 這週起三週, 一排一禮拜 (週一開頭); 只標目前篩選看得到的作業
   const WH = ["一","二","三","四","五","六","日"];
   const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dow = (day0.getDay() + 6) % 7;                  // 週一 = 0
@@ -829,7 +925,7 @@ if (dues.length){
   for (let k = 0; k < 21; k++){
     const off = k - dow;                                // 距離今天幾天 (負的是已經過去)
     const d = new Date(day0); d.setDate(day0.getDate() + off);
-    const hits = dues.filter(a => Math.floor((a.d - day0) / 86400000) === off);
+    const hits = shown.filter(a => Math.floor((a.d - day0) / 86400000) === off);
     const cls = ["c", off === 0 ? "today" : "", off < 0 ? "past" : "", hits.length ? "has" : "",
                  k % 7 >= 5 ? "wk" : ""].filter(Boolean).join(" ");
     const worst = hits.length ? tone(Math.min(...hits.map(h => h.days)), hits.every(h => h.submitted)) : null;
@@ -841,6 +937,58 @@ if (dues.length){
   }
   document.getElementById("tl").innerHTML = cells.join("");
 }
+
+// 任務超過三張: 滑鼠按住左右拖曳 (觸控板 / 滾輪 / 捲軸也可以); 拖過就不算點擊
+{
+  const el = document.getElementById("dues");
+  let x0 = 0, s0 = 0, id = null, moved = false;
+  el.addEventListener("pointerdown", e => {
+    if (e.pointerType !== "mouse" || e.button !== 0 || !el.classList.contains("scrollx")) return;
+    id = e.pointerId; x0 = e.clientX; s0 = el.scrollLeft; moved = false;
+  });
+  el.addEventListener("pointermove", e => {
+    if (e.pointerId !== id) return;
+    const dx = e.clientX - x0;
+    if (!moved && Math.abs(dx) > 5){ moved = true; el.classList.add("dragging"); el.setPointerCapture(id); }
+    if (moved) el.scrollLeft = s0 - dx;
+  });
+  const end = e => {
+    if (e.pointerId !== id) return;
+    id = null; el.classList.remove("dragging");
+    if (moved) setTimeout(() => { moved = false; }, 0);
+  };
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+  el.addEventListener("click", e => { if (moved){ e.stopPropagation(); e.preventDefault(); } }, true);
+  // 直向滾輪在卡片列上 → 橫向捲 (只有真的能橫捲時)
+  el.addEventListener("wheel", e => {
+    if (!el.classList.contains("scrollx") || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const max = el.scrollWidth - el.clientWidth;
+    if ((e.deltaY < 0 && el.scrollLeft <= 0) || (e.deltaY > 0 && el.scrollLeft >= max)) return;
+    el.scrollLeft += e.deltaY; e.preventDefault();
+  }, { passive:false });
+}
+
+document.getElementById("tf-sort").addEventListener("click", e => {
+  const b = e.target.closest("[data-tsort]"); if (!b || b.dataset.tsort === tf.sort) return;
+  tf.sort = b.dataset.tsort; renderTaskTools(); renderTasks(); saveTF();
+});
+document.getElementById("tf-state").addEventListener("click", e => {
+  const b = e.target.closest("[data-tstate]"); if (!b || b.dataset.tstate === tf.state) return;
+  tf.state = b.dataset.tstate; renderTaskTools(); renderTasks(); saveTF();
+});
+for (const [id, attr, key] of [["tf-sort", "tsort", "sort"], ["tf-state", "tstate", "state"]]){
+  document.getElementById(id).addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault(); e.stopPropagation();
+    const opts = [...document.querySelectorAll(`#${id} [data-${attr}]`)].map(b => b.dataset[attr]);
+    tf[key] = opts[(opts.indexOf(tf[key]) + (e.key === "ArrowRight" ? 1 : -1) + opts.length) % opts.length];
+    renderTaskTools(); renderTasks(); saveTF();
+    document.querySelector(`#${id} [data-${attr}="${tf[key]}"]`).focus();
+  });
+}
+document.getElementById("tf-past").addEventListener("change", e => {
+  tf.hidePast = e.target.checked; renderTaskTools(); renderTasks(); saveTF();
+});
 
 // ---- 信箱 ----
 // 分三類: 雜訊(只計數) / 校園公告(摺疊) / 需注意(展開列出)
@@ -876,17 +1024,19 @@ function mailTone(m){
   return null;
 }
 
-const seen = new Set();
-const mails = MAIL.messages
-  .map(m => ({ ...m, d: new Date(m.date), bucket: bucket(m) }))
-  .sort((x, y) => y.d - x.d)
-  .filter(m => { const key = m.addr + "|" + m.subject; if (seen.has(key)) return false; seen.add(key); return true; });
-
-const focus = mails.filter(m => m.bucket === "focus");
-const bulk  = mails.filter(m => m.bucket === "bulk");
-const noise = mails.filter(m => m.bucket === "noise");
-
-document.getElementById("s-mail").innerHTML = `${MAIL.stats.unread} <small>封未讀 · 需注意 ${focus.length}</small>`;
+let mails = [], focus = [], bulk = [], noise = [];
+function computeMails(){
+  const seen = new Set();
+  mails = CUR_M.messages
+    .map(m => ({ ...m, d: new Date(m.date), bucket: bucket(m) }))
+    .sort((x, y) => y.d - x.d)
+    .filter(m => { const key = m.addr + "|" + m.subject; if (seen.has(key)) return false; seen.add(key); return true; });
+  mails.forEach(m => { m.group = groupOf(m); m.rank = rankOf(m); });
+  focus = mails.filter(m => m.bucket === "focus");
+  bulk  = mails.filter(m => m.bucket === "bulk");
+  noise = mails.filter(m => m.bucket === "noise");
+  document.getElementById("s-mail").innerHTML = `${CUR_M.stats.unread} <small>封未讀 · 需注意 ${focus.length}</small>`;
+}
 
 // 沒有人工短句的信: 主旨去掉【…】和「給：…」前綴, 取前 9 個字 + 強關鍵字
 function mailFlash(m){
@@ -937,8 +1087,6 @@ function rankOf(m){
   return (M_URGENT.some(k => inSubj(m, k)) ? 100 : 0) + strong * 12
     + (m.bucket === "focus" ? 30 : 0) + (m.action ? 15 : 0) + G_WEIGHT[m.group];
 }
-mails.forEach(m => { m.group = groupOf(m); m.rank = rankOf(m); });
-
 const MF_KEY = "mail-filter-v1";
 const mf = { sort:"time", focus:true, groups: M_GROUPS.filter(g => g.id !== "sys").map(g => g.id) };
 try { Object.assign(mf, JSON.parse(localStorage.getItem(MF_KEY) || "{}")); } catch (e) {}
@@ -963,20 +1111,20 @@ function renderMails(){
   const sc = document.querySelector("#v-home .scroll"); if (sc) sc.scrollTop = 0;
 }
 function paintSort(){
-  document.querySelectorAll(".seg [data-sort]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.sort === mf.sort)));
+  document.querySelectorAll("#mf-sort [data-sort]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.sort === mf.sort)));
 }
 document.getElementById("mf-focus").checked = mf.focus;
-paintSort(); renderChips(); renderMails();
+paintSort();
 
-document.querySelector(".seg").addEventListener("click", e => {
+document.getElementById("mf-sort").addEventListener("click", e => {
   const b = e.target.closest("[data-sort]"); if (!b || b.dataset.sort === mf.sort) return;
   mf.sort = b.dataset.sort; paintSort(); renderMails(); saveMF();
 });
-document.querySelector(".seg").addEventListener("keydown", e => {
+document.getElementById("mf-sort").addEventListener("keydown", e => {
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
   e.preventDefault(); e.stopPropagation();
   mf.sort = mf.sort === "time" ? "rank" : "time"; paintSort(); renderMails(); saveMF();
-  document.querySelector(`.seg [data-sort="${mf.sort}"]`).focus();
+  document.querySelector(`#mf-sort [data-sort="${mf.sort}"]`).focus();
 });
 document.getElementById("mf-focus").addEventListener("change", e => {
   mf.focus = e.target.checked; renderChips(); renderMails(); saveMF();
@@ -987,15 +1135,18 @@ document.getElementById("mf-groups").addEventListener("change", e => {
   renderMails(); saveMF();
 });
 
-const mgen = new Date(MAIL.generated_at);
-const mailFoot = `${MAIL.account} · 最近 ${MAIL.window_days} 天共 ${MAIL.stats.total} 封，未讀 ${MAIL.stats.unread}`
-  + (noise.length ? `，另有 ${noise.length} 封系統通知（登入紀錄、安全性快訊、電子報）沒列出來` : "")
-  + ` · 擷取於 ${fmt(mgen)}`;
-document.getElementById("mail-foot").textContent = mailFoot;
-document.getElementById("sys-mail").textContent = mailFoot;
+function renderMailFoot(){
+  const mgen = new Date(CUR_M.generated_at);
+  const mailFoot = `${CUR_M.account} · 最近 ${CUR_M.window_days} 天共 ${CUR_M.stats.total} 封，未讀 ${CUR_M.stats.unread}`
+    + (noise.length ? `，另有 ${noise.length} 封系統通知（登入紀錄、安全性快訊、電子報）沒列出來` : "")
+    + ` · 擷取於 ${fmt(mgen)}`;
+  document.getElementById("mail-foot").textContent = mailFoot;
+  document.getElementById("sys-mail").textContent = mailFoot;
+}
 
 // ---- 課程 ----
-document.getElementById("courses").innerHTML = DATA.courses.map((c, ci) => {
+function renderCourses(){
+document.getElementById("courses").innerHTML = CUR_D.courses.map((c, ci) => {
   const body = c.items.length
     ? `<ul class="items">${c.items.map(i => `
         <li><span class="kind k-${i.kind}">${KIND[i.kind] || i.kind}</span>
@@ -1010,7 +1161,8 @@ document.getElementById("courses").innerHTML = DATA.courses.map((c, ci) => {
     ${body}
   </li>`;
 }).join("");
-document.getElementById("t-courses").textContent = DATA.courses.length;
+document.getElementById("t-courses").textContent = CUR_D.courses.length;
+}
 
 // ---- hover 幻燈片播放 ----
 {
@@ -1050,16 +1202,153 @@ document.getElementById("t-courses").textContent = DATA.courses.length;
 }
 
 // ---- 狀態列背景大字 = 這格的數值 ----
-document.querySelectorAll(".strip > div").forEach(cell => {
-  const m = (cell.querySelector("dd")?.textContent || "").match(/\d+/);
-  const wm = cell.querySelector(".wm"); if (wm) wm.textContent = m ? m[0] : "";
-});
+function renderWM(){
+  document.querySelectorAll(".strip > div").forEach(cell => {
+    const m = (cell.querySelector("dd")?.textContent || "").match(/\d+/);
+    const wm = cell.querySelector(".wm"); if (wm) wm.textContent = m ? m[0] : "";
+  });
+}
 
-// ---- 時間戳 ----
-const gen = new Date(DATA.generated_at);
-const ageH = Math.floor((now - gen) / 3600000);
-const age = ageH < 1 ? "剛剛" : ageH < 48 ? `${ageH} 小時前` : `${Math.floor(ageH/24)} 天前`;
-document.getElementById("stamp").innerHTML = `資料擷取於 ${fmt(gen)}<br>(${age})`;
+// ---- 時間戳 + 資料來源 ----
+// live.mode: "snapshot" = 每日快照 (手機 / 瀏覽器, 或還在連) ; "live" = 剛從本機讀到 ; "stale" = 本機暫時讀不到, 顯示上一份
+const live = { mode:"snapshot", note:"", readAt:null, db:"" };
+function renderStamp(){
+  const gen = new Date(CUR_D.generated_at);
+  const ageH = Math.floor((now - gen) / 3600000);
+  const age = ageH < 1 ? "剛剛" : ageH < 48 ? `${ageH} 小時前` : `${Math.floor(ageH/24)} 天前`;
+  const tag = live.mode === "live" ? `<span class="src live" title="直接讀你電腦上同步腳本的輸出">即時・本機</span>`
+            : live.mode === "stale" ? `<span class="src warn" title="${esc(live.note)}">本機暫時讀不到</span>`
+            : `<span class="src" title="每天排程更新的資料">每日更新</span>`;
+  document.getElementById("stamp").innerHTML = `資料擷取於 ${fmt(gen)}<br>(${age})${tag}`;
+  document.getElementById("sys-live").textContent = [live.db, live.note].filter(Boolean).join(" ");
+}
+
+function renderAll(){
+  now = new Date();
+  computeDues(); renderTaskTools(); renderTasks();
+  computeMails(); renderChips(); renderMails(); renderMailFoot();
+  renderFixed(); renderCourses(); renderWM(); renderStamp();
+}
+renderAll();
+
+// ---- 資料來源切換 ----
+const newerOrSame = (a, b) => !!a && (!b || new Date(a) >= new Date(b));
+let LIVE_P = null, shownSig = "";
+
+// 本機即時資料 (latest.json / mail.json 的整理版) 疊在 BASE 上: first_seen、教材本機路徑、信件摘要沿用 BASE
+function mergeLive(p){
+  let D = BASE_D, M = BASE_M;
+  if (p.data && newerOrSame(p.data.generated_at, BASE_D.generated_at)){
+    const d = p.data, B = BASE_D;
+    const fs = new Map(), loc = new Map(), dept = new Map();
+    for (const a of B.assignments) if (a.first_seen) fs.set(a.url, a.first_seen);
+    for (const c of B.courses){ dept.set(c.code, c.dept); for (const i of c.items) if (i.local) loc.set(i.url, i.local); }
+    D = {
+      generated_at: d.generated_at, semester: d.semester || B.semester, root: d.root || B.root,
+      assignments: d.assignments.map(a => ({ ...a, first_seen: fs.get(a.url) || d.generated_at })),
+      courses: d.courses.map(c => ({ ...c, dept: c.dept || dept.get(c.code) || "",
+        items: c.items.map(i => i.local || !loc.has(i.url) ? i : { ...i, local: loc.get(i.url) }) })),
+      index: d.index && d.index.courses ? d.index : { ...B.index, files: d.index && d.index.files != null ? d.index.files : B.index.files },
+      errors: d.errors || [],
+    };
+  }
+  if (p.mail && newerOrSame(p.mail.generated_at, BASE_M.generated_at)){
+    const old = new Map(BASE_M.messages.map(m => [m.uid, m]));   // 每日排程寫好的摘要 / 要做的事 / 大字, 用 uid 沿用
+    M = { ...p.mail, noise: BASE_M.noise, dept: BASE_M.dept,
+      messages: p.mail.messages.map(m => {
+        const r = { ...m }, o = old.get(m.uid) || {};
+        for (const k of ["summary", "action", "flash"]) if (o[k]) r[k] = o[k];
+        return r;
+      }) };
+  }
+  return { D, M };
+}
+// 重新決定要顯示哪份; 真的有變才重畫 (免得每次輪詢都把捲動位置洗掉)
+function recompute(){
+  const { D, M } = LIVE_P ? mergeLive(LIVE_P) : { D: BASE_D, M: BASE_M };
+  const sig = [D.generated_at, M.generated_at, D.written_at, M.written_at,
+               LIVE_P && LIVE_P.data && LIVE_P.data.file_mtime, LIVE_P && LIVE_P.mail && LIVE_P.mail.file_mtime].join("|");
+  CUR_D = D; CUR_M = M;
+  if (sig !== shownSig){ shownSig = sig; renderAll(); }
+  else renderStamp();
+}
+shownSig = [DATA.generated_at, MAIL.generated_at, DATA.written_at, MAIL.written_at, null, null].join("|");
+
+// ---- 頁面資料庫: 每日排程寫進 dashboard/data、dashboard/mail ----
+{
+  (async () => {
+    let db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch (e) { db = null; }
+    if (!db) return;                                   // 存檔的頁面 / 沒開資料庫: 用內嵌快照
+    const watch = (id, apply) => {
+      try {
+        db.doc("dashboard/" + id).onSnapshot(snap => {
+          if (!snap.exists) return;
+          const d = snap.data();
+          if (!d || !d.generated_at) return;
+          apply(d);
+        }, err => {
+          live.db = `讀頁面資料庫失敗（${err && err.code || "unknown"}），先顯示發佈時的資料。`;
+          renderStamp();
+        });
+      } catch (e) { /* 路徑寫錯之類的程式錯誤: 維持快照 */ }
+    };
+    watch("data", d => {
+      if (d === BASE_D || !newerOrSame(d.generated_at, DATA.generated_at)) return;   // 比內嵌快照舊就不用
+      BASE_D = d; recompute();
+    });
+    watch("mail", m => {
+      if (m === BASE_M || !Array.isArray(m.messages) || !newerOrSame(m.generated_at, MAIL.generated_at)) return;
+      BASE_M = m; recompute();
+    });
+  })();
+}
+
+// ---- 本機即時資料: 在 Claude 桌面版裡, 透過本機 MCP server (host:betterel) 直接讀 latest.json / mail.json ----
+// 需要頁面有 host:betterel 權限 (只能從跑在使用者電腦上的 session 發佈時加上)。沒有就安靜地用 BASE。
+{
+  const SERVER = "host:betterel", TOOL = "get_dashboard_data";
+  function setMode(mode, note){ live.mode = mode; live.note = note; renderStamp(); }
+  function dropLive(note){ LIVE_P = null; live.mode = "snapshot"; live.note = note; recompute(); }
+
+  (async () => {
+    let mcp = null;
+    try { mcp = window.claude && window.claude.use ? await window.claude.use("mcp") : null; } catch (e) { mcp = null; }
+    if (!mcp) return;
+    let listed = null;
+    try { listed = await mcp.listTools(SERVER); } catch (e) { listed = null; }
+    if (!listed || !listed.servers || !listed.servers.length) return;   // 這頁沒宣告 / 這個畫面沒有本機連線: 不打擾
+    setMode("snapshot", "正在向本機的 betterel 要最新資料…");
+
+    mcp.watchTool(SERVER, TOOL, null, ev => {
+      if (ev.type === "data"){
+        const p = ev.result && ev.result.payload;
+        if (!p || typeof p !== "object"){ setMode(live.mode === "live" ? "stale" : "snapshot", "本機回傳的格式看不懂，先顯示原本的資料。"); return; }
+        LIVE_P = p;
+        const when = ev.result.cache ? new Date(ev.result.cache.storedAt) : new Date(p.read_at || Date.now());
+        const probs = (p.problems || []).length ? `（${p.problems.join("；")}）` : "";
+        live.mode = "live";
+        live.note = `即時模式：${fmt(when)} 從你電腦的 _moodle 資料夾讀到最新的同步結果${probs}。每 5 分鐘自動再讀一次。信件摘要還是每天排程寫的，新信在那之前先顯示開頭。`;
+        recompute();
+        return;
+      }
+      const err = ev.error || {}, code = err.code;
+      if (code === "server_not_connected")
+        return dropLive("本機的 betterel 沒連上：要在 Claude 桌面版裡開這頁，並確認跑過 _moodle\\install_mcp.ps1、之後重開過桌面版。");
+      if (code === "not_in_manifest" || code === "consent_required")
+        return dropLive("沒有允許這頁讀本機資料（可以在這頁的權限設定裡重新開啟）。");
+      if (code === "cancelled")
+        return dropLive("剛剛讀本機資料的確認被取消了，重新整理這頁可以再試一次。");
+      if (code === "needs_reauth" || code === "blocked_by_policy" || code === "approval_required")
+        return dropLive(`讀本機資料被擋下來了（${code}）。`);
+      if (code === "not_granted" || code === "capability_disabled" || code === "capability_removed")
+        return dropLive("");
+      if (code === "tool_error")
+        return setMode(live.mode === "live" ? "stale" : "snapshot", `本機讀檔失敗：${err.message || ""}（可能同步腳本剛好在寫檔，等一下會再讀）。`);
+      setMode(live.mode === "live" ? "stale" : "snapshot", `暫時連不到本機的 betterel（${code || "unknown"}），先顯示上一份資料。`);
+    }, { refetchInterval: 5 * 60 * 1000 });
+  })();
+}
 
 // ---- 分頁：跳轉, 不捲頁 ----
 const VIEWS = ["home", "courses", "library", "system"];
@@ -1097,18 +1386,45 @@ show(location.hash.slice(1) || "home", false);
     let raf = 0, mx = -1, my = -1;
     const tick = () => {
       raf = 0;
+      // 同一個 data-tilt-group 的面板合成一塊: 用它們的聯集矩形算角度, transform-origin 都對到聯集中心,
+      // 所以看起來是同一片板子在轉 (用 offset 座標算, 不吃自己的 transform, 不會抖)
+      const groups = new Map();
       for (const el of els()){
-        const r = el.getBoundingClientRect();
-        if (!r.width) continue;
-        const inside = mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom;
-        const dx = (mx - (r.left + r.width / 2)) / (innerWidth / 2);
-        const dy = (my - (r.top + r.height / 2)) / (innerHeight / 2);
-        const k = parseFloat(el.dataset.tilt) || 1;   // data-tilt="0.5" 可以把大面板的幅度調小
+        const key = el.dataset.tiltGroup || el;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(el);
+      }
+      for (const [key, members] of groups){
+        const grouped = typeof key === "string" && members[0].offsetParent;
+        let U;
+        if (grouped){
+          const b = members[0].offsetParent.getBoundingClientRect();
+          const L = Math.min(...members.map(e => e.offsetLeft)), T = Math.min(...members.map(e => e.offsetTop));
+          const R = Math.max(...members.map(e => e.offsetLeft + e.offsetWidth)), B = Math.max(...members.map(e => e.offsetTop + e.offsetHeight));
+          U = { left:b.left + L, top:b.top + T, right:b.left + R, bottom:b.top + B, width:R - L, height:B - T };
+        } else U = members[0].getBoundingClientRect();
+        if (!U.width) continue;
+        const cx = U.left + U.width / 2, cy = U.top + U.height / 2;
+        const inside = mx >= U.left && mx <= U.right && my >= U.top && my <= U.bottom;
+        const dx = (mx - cx) / (innerWidth / 2);
+        const dy = (my - cy) / (innerHeight / 2);
+        const k = parseFloat(members[0].dataset.tilt) || 1;   // data-tilt="0.5" 可以把大面板的幅度調小
         const amp = (inside ? 2.2 : 0.9) * k;
-        el.style.setProperty("--ry", (Math.max(-1, Math.min(1, dx)) * amp).toFixed(2) + "deg");
-        el.style.setProperty("--rx", (-Math.max(-1, Math.min(1, dy)) * amp).toFixed(2) + "deg");
-        el.style.setProperty("--mx", ((mx - r.left) / r.width * 100).toFixed(1) + "%");
-        el.style.setProperty("--my", ((my - r.top) / r.height * 100).toFixed(1) + "%");
+        const ry = (Math.max(-1, Math.min(1, dx)) * amp).toFixed(2) + "deg";
+        const rx = (-Math.max(-1, Math.min(1, dy)) * amp).toFixed(2) + "deg";
+        for (const el of members){
+          el.style.setProperty("--ry", ry);
+          el.style.setProperty("--rx", rx);
+          if (grouped){
+            const ox = cx - (members[0].offsetParent.getBoundingClientRect().left + el.offsetLeft);
+            const oy = cy - (members[0].offsetParent.getBoundingClientRect().top + el.offsetTop);
+            el.style.transformOrigin = `${ox.toFixed(1)}px ${oy.toFixed(1)}px`;
+          }
+          const r = el.getBoundingClientRect();
+          if (!r.width) continue;
+          el.style.setProperty("--mx", ((mx - r.left) / r.width * 100).toFixed(1) + "%");
+          el.style.setProperty("--my", ((my - r.top) / r.height * 100).toFixed(1) + "%");
+        }
       }
     };
     addEventListener("pointermove", e => { mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(tick); }, { passive:true });
@@ -1204,7 +1520,7 @@ show(location.hash.slice(1) || "home", false);
     const desc = tidy(a.description);
     $("md-desc-wrap").hidden = !desc;
     $("md-desc").textContent = desc;
-    const course = DATA.courses.find(x => x.code === a.code);
+    const course = CUR_D.courses.find(x => x.code === a.code);
     const mats = course ? course.items.filter(i => ["resource","folder","page"].includes(i.kind)).slice(0, 8) : [];
     const matDir = `${ROOT}\\${a.course}\\教材`;
     $("md-mats-wrap").hidden = false;
@@ -1328,7 +1644,7 @@ show(location.hash.slice(1) || "home", false);
   // 卡片本身不帶網址, 點了只開浮層; 要去原網頁一律走浮層裡的「出處」按鈕
   document.getElementById("dues").addEventListener("click", e => {
     const el = e.target.closest(".due"); if (!el) return;
-    openDetail("assign", dues[+el.dataset.idx], el, dues.map((_, i) => i));   // 從任務卡點: 箭頭可切到所有任務; 從日曆點: 只在當天
+    openDetail("assign", dues[+el.dataset.idx], el, shown.map(a => dues.indexOf(a)));   // 從任務卡點: 箭頭可切到所有任務; 從日曆點: 只在當天
   });
   document.getElementById("tl").addEventListener("click", e => {
     const cell = e.target.closest(".has"); if (!cell) return;

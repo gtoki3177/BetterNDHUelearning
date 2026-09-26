@@ -13,6 +13,7 @@ description: 第一次安裝 BetterNDHUelearning：把東華 e學苑 / gms 信�
 - **不動加密檔**：不讀、不搬 `cred.dat`、`mail_cred.dat`。
 - **不連學校**：不自己連 `elearn4.ndhu.edu.tw` 或 `imap.gmail.com`，所有抓取都在使用者電腦上跑。
 - **不覆蓋設定**：已存在的 `config.ini`、`state.db`、`latest.json`、`mail.json` 一律不覆蓋。重裝時只更新程式檔（`.py` / `.ps1` / `.vbs`），更新前先講清楚會換掉哪些檔。
+- **升級**：使用者說「更新 / 升級 BetterNDHUelearning」時，只做第 2 步（更新程式檔）。儀表板不用手動改：下一次每日更新時，daily-update 的 `build.py` 看到範本版本比較新會自動換上新版。
 - **需要 Windows**：同步程式只支援 Windows（密碼加密和工作排程都是 Windows 的功能）。使用者用 Mac / Linux 的話，老實說目前不支援。
 
 ## 1. 確認環境
@@ -85,14 +86,30 @@ powershell -ExecutionPolicy Bypass -File .\install_open_local.ps1
 
 限制要先講清楚：Claude 桌面版的 artifact 面板不會把這種連結交給 Windows，所以在桌面版裡點教材只會複製路徑。要點了就直接開檔，得用 Chrome 或 Edge 開儀表板網址。開檔前瀏覽器會閃一下新分頁，這是正常的。
 
+## 4b. 本機即時模式（選用，實驗性）
+
+儀表板平常顯示每日排程存進去的快照。開了這個模式後，在 **Claude 桌面版**裡打開儀表板時，頁面會透過本機的 MCP server `betterel`（`_moodle\betterel_mcp.py`）直接讀 `latest.json` / `mail.json`，同步腳本一跑完就看得到；手機和一般瀏覽器照樣看快照。
+
+- `betterel_mcp.py` 只讀那兩個檔和 `config.ini`，不寫檔、不連網路，信件只回未讀信的開頭 260 字。由桌面版啟動、跟著桌面版結束，閒著幾乎不吃資源（約 13 MB 記憶體）。
+- 請使用者**先完全關掉 Claude 桌面版**（系統匣圖示也要結束，不然它關閉時可能把設定檔蓋回去），再執行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1
+```
+
+  它會先自我測試，再把 `betterel` 加進桌面版的 `claude_desktop_config.json`（一般版和 Microsoft Store 版的位置都會處理，改之前先備份）。移除：加 `-Remove` 再跑一次。
+- 頁面要讀 `betterel`，發佈時的 `capabilities` 除了資料庫，還要加上本機 server：`{"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "mcp": {"servers": [{"server": "host:betterel", "tools": ["get_dashboard_data"]}]}}`（`capabilities` 是整組取代，兩個都要寫）。**只有跑在使用者電腦上的 session 能宣告 `host:` server**；雲端 session（包括排程）會被拒絕。雲端 session 就不要帶，頁面會自動退回快照，之後使用者在本機 session 重新發佈一次就會生效。
+- 帶了 `host:` 權限的頁面可能不能用公開連結分享，先跟使用者講。
+
 ## 5. 建立儀表板
 
 等使用者說 `moodle_sync.py --force` 跑完了：
 
 1. **檢查同步結果**：把 `latest.json`、`config.ini`（有信箱的話加 `mail.json`）拿進工作環境。先看 `latest.json` 的 `errors` 和 `log.txt` 最後幾行。登入失敗通常是學號打錯，或密碼要重跑 `set_password.py`。
-2. **產生頁面**：用 daily-update 技能的 `scripts/build.py`，以 `--template` 指向 daily-update 技能的 `assets/dashboard.html`（第一次沒有 `--page`）。
+2. **產生頁面和資料**：用 daily-update 技能的 `scripts/build.py`，以 `--template` 指向 daily-update 技能的 `assets/dashboard.html`（第一次沒有 `--page` 也沒有 `--prev-dir`），同時帶 `--out new.html --db-out db`。
 3. **補寫信件摘要**：照 daily-update 技能第 4 步，替 `need_summary` 寫好摘要，再跑第二輪。
-4. **發佈**：用 Artifact 工具發佈成新頁面，`icon` 用 `calendar`，不帶 `url`。
+4. **發佈**：用 Artifact 工具發佈成新頁面，`icon` 用 `calendar`，不帶 `url`，帶 `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}}`（頁面從自己的資料庫讀資料，只有擁有者能寫）。有做 4b、而且這是本機 session 的話，改帶 4b 那組。
+   接著照 daily-update 技能第 5 步，用 ArtifactData `batch` 把 `db/data.json`、`db/mail.json` 寫進 `dashboard/data`、`dashboard/mail`（第一次不帶 `if_version`）。之後每天只會更新這兩份資料，不會重新發佈頁面。
 5. **記下網址**：把拿到的網址寫回 `config.ini` 的 `[dashboard] artifact_url =`。只改這一行，其他行照原樣保留。
 
 ## 6. 設定每天自動更新
