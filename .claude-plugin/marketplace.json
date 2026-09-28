@@ -11,7 +11,7 @@
       "name": "better-ndhu-elearning",
       "source": "./plugins/better-ndhu-elearning",
       "description": "東華 e學苑作業、課程、教材和 gms 信箱整合成即時更新的 BetterElearning 儀表板。",
-      "version": "0.4.0"
+      "version": "0.4.1"
     }
   ]
 }

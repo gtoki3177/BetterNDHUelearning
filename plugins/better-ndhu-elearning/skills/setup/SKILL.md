@@ -109,44 +109,39 @@ powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1
 1. **檢查同步結果**：把 `latest.json`、`config.ini`（有信箱的話加 `mail.json`）拿進工作環境。先看 `latest.json` 的 `errors` 和 `log.txt` 最後幾行。登入失敗通常是學號打錯，或密碼要重跑 `set_password.py`。
 2. **產生頁面和資料**：用 daily-update 技能的 `scripts/build.py`，以 `--template` 指向 daily-update 技能的 `assets/dashboard.html`（第一次沒有 `--page` 也沒有 `--prev-dir`），同時帶 `--out new.html --db-out db`。
 3. **補寫信件摘要**：照 daily-update 技能第 4 步，替 `need_summary` 寫好摘要，再跑第二輪。
-4. **發佈**：用 Artifact 工具發佈成新頁面，`icon` 用 `calendar`，不帶 `url`，帶 `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "sample": {}, "mcp": {"servers": [{"server": "Claude Code Remote", "tools": ["fire_trigger"]}]}}`（頁面從自己的資料庫讀資料，只有擁有者能寫；`sample` 讓頁面替新信寫摘要；`fire_trigger` 給「立即同步」按鈕觸發每小時推資料的排程）。第 6 步建好「每小時推資料」排程後，用 ArtifactData `set` 寫 `dashboard/settings`：`{"push_trigger_id": "<那個排程的 trig_ id>", "last_push": null}`。
+4. **發佈**：用 Artifact 工具發佈成新頁面，`icon` 用 `calendar`，不帶 `url`，帶 `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "sample": {}, "mcp": {"servers": [{"server": "Claude Code Remote", "tools": ["fire_trigger"]}]}}`（頁面從自己的資料庫讀資料，只有擁有者能寫；`sample` 讓頁面替新信寫摘要；`fire_trigger` 給「立即同步」按鈕觸發第 6 步的排程）。
    接著照 daily-update 技能第 5 步，用 ArtifactData `batch` 把 `db/data.json`、`db/mail.json` 寫進 `dashboard/data`、`dashboard/mail`（第一次不帶 `if_version`）。之後每天只會更新這兩份資料，不會重新發佈頁面。
 5. **記下網址**：把拿到的網址寫回 `config.ini` 的 `[dashboard] artifact_url =`。只改這一行，其他行照原樣保留。
 
-## 6. 設定每天自動更新
+## 6. 設定自動更新
 
-用 `create_trigger` 建立排程（名稱：「BetterElearning 每日更新」）：
+用 `create_trigger` 建**一個**排程就好（名稱：「BetterElearning 更新」）。每日的完整更新、平常的推資料、儀表板的「立即同步」都是它，靠執行時間和訊息內容分模式（見 daily-update 技能）。不要另外再建一個推資料用的排程：另外建的排程曾經連不到使用者的資料夾。
 
-- 時間：台北時間每天 13:05，也就是 `cron_expression: "5 5 * * *"`（UTC）。這個時間排在本機 12:00 / 12:20 的同步之後。
+- 時間：台北時間每天 6:20、10:20、14:20、18:20、22:20，也就是 `cron_expression: "CRON_TZ=Asia/Taipei 20 6,10,14,18,22 * * *"`。18:20 那輪是完整更新（寫摘要、推播），其他是只推資料。使用者嫌多或嫌少可以改，但 18 點那輪要留著。
 - `requires_local_device: true`。
 - `folders`：填根資料夾。
 - `prompt`：
 
 ```text
-執行 BetterNDHUelearning 的每日更新（better-ndhu-elearning 外掛的 daily-update 技能）。
+執行 BetterNDHUelearning 的儀表板更新（better-ndhu-elearning 外掛的 daily-update 技能）。
 設定檔：<根資料夾>\_moodle\config.ini
-這是全自動排程，沒人在旁邊，不要問問題，照技能的步驟做完。
-```
-
-再建一個「BetterElearning 每小時推資料」，讓手機和瀏覽器不用等到每天那次：
-
-- 時間：台北時間 8 點到半夜每小時一次，錯開整點，例如 `cron_expression: "CRON_TZ=Asia/Taipei 20 0,8-23 * * *"`。
-- `requires_local_device: true`、`folders` 同上，`notifications: {}`（不推播）。
-- `prompt`：
-
-```text
-執行 BetterNDHUelearning 的每日更新的「快速模式」（better-ndhu-elearning 外掛的 daily-update 技能，文末那一節）：只推資料，不寫摘要、不推播、不發佈頁面。
-設定檔：<根資料夾>\_moodle\config.ini
+儀表板：<artifact_url>
+先用 date 看台北時間：18 點這一輪、而且訊息後面沒有附「立即同步」→ 照技能做完整更新；其他情況 → 照技能文末的「快速模式」只推資料（附了「立即同步」就先叫本機同步）。兩種都要做技能裡的「收尾」。
 這是全自動排程，沒人在旁邊，不要問問題。
 ```
 
-建好後，用一句話告訴使用者這個排程的核准設定。如果每次執行都要核准，提醒他可以在排程設定裡改成「自動核准」，不然沒人按核准就不會更新。
+建好後：
+
+1. 用 ArtifactData `set` 寫 `dashboard/settings`：`{"push_trigger_id": "<這個排程的 trig_ id>", "last_push": null}`。儀表板的「立即同步」按鈕靠它知道要觸發哪個排程。
+2. 用 `fire_trigger` 帶 `text: "立即同步（安裝測試）"` 觸發一次，兩三分鐘後讀 `dashboard/settings`，確認 `last_push.result` 不是「電腦沒開」或權限錯誤。如果是權限錯誤，請使用者在 Claude 桌面版的排程設定裡確認這個排程可以用根資料夾。
+3. 用一句話告訴使用者這個排程的核准設定。如果每次執行都要核准，提醒他可以在排程設定裡改成「自動核准」，不然沒人按核准就不會更新。
 
 ## 7. 收尾
 
 用幾句話告訴使用者：
 
 - 儀表板網址。建議用 Chrome / Edge 開，把分頁固定起來；如果裝了「直接開檔」，在瀏覽器裡點教材才打得開。
-- 電腦開著時，信箱每 10 分鐘、e學苑每 30 分鐘同步一次；在 Claude 桌面版開著儀表板會即時更新，手機和瀏覽器最慢一小時。每天 13:05 左右那次會寫摘要、推播。電腦關機時會停在最後一次同步。
+- 電腦開著時，信箱每 10 分鐘、e學苑每 30 分鐘在本機同步；Claude 一天推 5 次到儀表板（6:20、10:20、14:20、18:20、22:20），18:20 那次會寫摘要、推播。等不及就按儀表板右上角「立即同步」，大約 1–2 分鐘。
+- Claude 要推資料時，電腦要開著、登入，而且 Claude 桌面版要開著；不然會停在最後一次推上去的資料。
 - 排程有沒有在跑，可以在 `_moodle` 執行 `check_task.ps1` 查。
 - 查講義內容可以直接問 Claude，例如「哪堂課講過 deadlock」。

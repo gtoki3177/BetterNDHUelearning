@@ -7,12 +7,14 @@ description: 每天更新東華大學 e學苑 / gms 信箱的 BetterElearning �
 
 使用者電腦上的 `moodle_sync.py`（抓 e學苑 → `latest.json`，每 30 分鐘）和 `mail_sync.py`（IMAP 讀 gms 信箱 → `mail.json`，每 10 分鐘）由 Windows 工作排程器常駐跑，內容沒變就不重寫檔案。這個技能只負責把兩份 JSON 讀進來、寫好信件摘要，更新到儀表板的資料庫。
 
-從 0.4 起，儀表板頁面自己也會寫資料庫：在 Claude 桌面版開著時會把比資料庫新的本機資料存進去，也會替還沒摘要的「需注意」新信寫摘要。所以寫回資料庫時一定要帶 `if_version`（第 5 步），被拒絕就重讀再做。
+從 0.4 起，儀表板頁面自己也會寫資料庫：替還沒摘要的「需注意」新信寫摘要並存回去。所以寫回資料庫時一定要帶 `if_version`（第 5 步），被拒絕就重讀再做。
 
-這個技能有兩種跑法：
+使用者只有**一個** Claude 排程「BetterElearning 更新」，一天跑幾次（預設台北時間 6:20、10:20、14:20、18:20、22:20），儀表板的「立即同步」按鈕也是觸發同一個排程。每次先用 `date` 看台北時間（UTC+8）決定模式：
 
-- **每日更新**（預設）：下面第 0–7 步全部做。
-- **快速模式**：排程的指示寫「快速模式」時只做「只推資料」，見文末。
+- **完整模式**：台北時間 18 點那一輪，而且排程訊息後面**沒有**附「立即同步」。下面第 0–7 步全部做（寫摘要、推播）。使用者直接在對話裡叫你「更新儀表板」時也用這個模式。
+- **快速模式**：其他所有情況，只推資料，見文末。
+
+兩種模式最後都要做文末的「收尾」。
 
 - 不要自己連 `elearn4.ndhu.edu.tw` 或 `imap.gmail.com`：雲端環境連不到，抓資料永遠是本機腳本的事。
 - 不要碰 `cred.dat`、`mail_cred.dat`（加密的密碼），不要讀、不要搬。
@@ -136,8 +138,8 @@ python3 <本技能資料夾>/scripts/build.py \
 
 - 一定要帶 `url: <artifact_url>`，不帶會變成另一個新頁面。
 - 不要帶 `icon`。
-- 舊頁面第一次升級（第 2 步 `dashboard` 是空的）時帶 `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}}`：讓頁面讀得到資料庫，而且只有擁有者（和 Claude 代擁有者）能寫。
-- 其他時候不要帶 `capabilities`。省略時會保留頁面原本的權限；傳 `{}` 或只傳一部分，反而會把沒寫到的權限清掉，例如使用者在本機 session 開過的即時模式（`host:betterel`）。
+- 舊頁面第一次升級（第 2 步 `dashboard` 是空的），或這次把範本從 0.4 以前升到 0.4 以後（`template_upgraded.from` < 0.4）時，帶完整的 `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "sample": {}, "mcp": {"servers": [{"server": "Claude Code Remote", "tools": ["fire_trigger"]}]}}`：資料庫只有擁有者（和 Claude 代擁有者）能寫；`sample` 讓頁面替新信寫摘要；`fire_trigger` 給「立即同步」按鈕用。升到 0.4 時也要照收尾一節建好 `dashboard/settings`。
+- 其他時候不要帶 `capabilities`。省略時會保留頁面原本的權限；傳 `{}` 或只傳一部分，反而會把沒寫到的權限清掉，例如讓頁面寫摘要的 `sample`、給「立即同步」用的 `mcp`（Claude Code Remote）。
 
 ## 6. 回報
 
@@ -167,15 +169,19 @@ python3 <本技能資料夾>/scripts/build.py \
 - **需注意**：其他所有信，加上命中兩個以上強關鍵字的 announce 信。
 - **強關鍵字**：截止 / 逾期 / 繳費 / 選課 / 停課 / 補課 / 調課 / 成績 / 獎學金 / 考試 / 註冊 / 重要。
 
-## 快速模式（每小時的「只推資料」）
+## 快速模式（只推資料）
 
-目的：讓手機和瀏覽器看到的資料不用等到每天那次。不寫摘要、不推播、不發佈 HTML，儘量少花額度。
+目的：讓手機和瀏覽器看到的資料不用等到每天傍晚那次。不寫摘要、不推播、不發佈 HTML，最後的回覆不要用 `<routine_summary>` 包任何東西（排程的推播是看這個），儘量少花額度：不要讀或印出 JSON 內容，全部用檔案和腳本處理。
 
 0. 排程訊息後面附了「立即同步」（使用者按了儀表板的按鈕）時：先呼叫本機 betterel 的 `run_sync`（`target: "all"`），再每 15 秒呼叫 `get_dashboard_data` 只看 `sync` 欄位，等 moodle、mail 都不是 `running` 而且 `finished_at` 晚於 `run_sync` 回傳的 `requested_at`（最多 3 分鐘）。沒有 betterel 工具就跳過。
-1. 照第 0、1 步拿到 `latest.json`、`mail.json`、`config.ini`。連不到電腦就跳到第 6 步。
+1. 照第 0、1 步拿到 `latest.json`、`mail.json`、`config.ini`。真的連不到電腦才算「電腦沒開」，跳到收尾；其他錯誤（例如拿不到資料夾權限）把錯誤原文簡短寫進收尾的結果。
 2. 照第 2 步把 `dashboard` 讀進 `prev`，記下兩份文件的 `version`。
-3. 比對：`latest.json` 的 `generated_at` 和 `prev` 裡 data 文件的 `generated_at` 指的是同一個時間（build.py 會補上 `+08:00`，比的時候忽略這個差別），而且 `mail.json` 和 mail 文件的 `generated_at` 也一樣 → 回一句「沒有新東西」就結束。
+3. 比對：`latest.json` 的 `generated_at` 和 `prev` 裡 data 文件的 `generated_at` 指的是同一個時間（build.py 會補上 `+08:00`，比的時候忽略這個差別），而且 `mail.json` 和 mail 文件的 `generated_at` 也一樣 → 結果是「沒有新東西」，跳到收尾。
 4. 否則跑一般流程的 `build.py`，多加 `--no-upgrade`，不要帶 `--summaries`。
-5. 照第 5 步用 `batch` 寫回兩份文件（帶 `if_version`）。版本不符就重做第 2–5 步一次；再失敗就結束，下個小時會再試。
-6. **一定要做**：ArtifactData `update` `dashboard/settings`，`{"last_push": {"at": "<現在，ISO 8601 含 +08:00>", "result": "<一句話結果>"}}`。儀表板靠它知道「立即同步」做完了、顯示「最後檢查」。
-7. 回報同一句話。不要推播。
+5. 照第 5 步用 `batch` 寫回兩份文件（帶 `if_version`）。版本不符就重做第 2–5 步一次；再失敗結果寫「資料庫剛好有人在寫，下次再推」。結果寫成一句話，作業繳交狀態有變一定要寫出來，例如「推了新資料：計算機結構 HW#01 已繳交、信箱多 2 封」。
+
+## 收尾（兩種模式都要做）
+
+ArtifactData `update` `dashboard/settings`：`{"last_push": {"at": "<現在，ISO 8601 含 +08:00>", "result": "<一句話結果>"}}`。儀表板靠它知道「立即同步」做完了，也拿它顯示「最後檢查」。`settings` 文件不存在（0.4 以前建的頁面）就改用 `set`，並補上 `push_trigger_id`：用 `list_triggers` 找名字是「BetterElearning 更新」（或舊名「BetterElearning 每日更新」）的排程 id。
+
+快速模式最後回覆同一句話；完整模式照第 6、7 步回報和推播。
