@@ -50,7 +50,7 @@ description: 第一次安裝 BetterNDHUelearning：把東華 e學苑 / gms 信�
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-這會裝 Python 套件，並註冊兩個工作排程：登入時一次、每天 12:00 一次。沒有 Python 的話，請他先到 python.org 下載安裝，安裝時勾選「Add python.exe to PATH」。
+這會裝 Python 套件，並註冊工作排程「NDHU Moodle Sync」：登入時一次、之後每 30 分鐘一次（每天第一次是完整同步，其他是十幾秒的輕量同步）。沒有 Python 的話，請他先到 python.org 下載安裝，安裝時勾選「Add python.exe to PATH」。
 
 ```powershell
 python set_password.py
@@ -71,6 +71,8 @@ python mail_sync.py --test
 python mail_sync.py
 powershell -ExecutionPolicy Bypass -File .\install_mail_task.ps1
 ```
+
+`install_mail_task.ps1` 會註冊「NDHU Mail Sync」：登入時一次、之後每 10 分鐘一次（增量同步，一次幾秒）。
 
 學校如果鎖了應用程式密碼，`--test` 會登入失敗。這時就先跳過信箱，把 `config.ini` 整個 `[mail]` 段保留不動即可。
 
@@ -98,8 +100,7 @@ powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1
 ```
 
   它會先自我測試，再把 `betterel` 加進桌面版的 `claude_desktop_config.json`（一般版和 Microsoft Store 版的位置都會處理，改之前先備份）。移除：加 `-Remove` 再跑一次。
-- 頁面要讀 `betterel`，發佈時的 `capabilities` 除了資料庫，還要加上本機 server：`{"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "mcp": {"servers": [{"server": "host:betterel", "tools": ["get_dashboard_data"]}]}}`（`capabilities` 是整組取代，兩個都要寫）。**只有跑在使用者電腦上的 session 能宣告 `host:` server**；雲端 session（包括排程）會被拒絕。雲端 session 就不要帶，頁面會自動退回快照，之後使用者在本機 session 重新發佈一次就會生效。
-- 帶了 `host:` 權限的頁面可能不能用公開連結分享，先跟使用者講。
+- 頁面目前**不宣告** `host:betterel`：平台現在不讓任何 session 發佈帶 `host:` 的頁面（雲端、本機都會被拒）。頁面裡讀 betterel 的程式碼留著，平台開放後補宣告就會生效。現在 betterel 的用途是讓排程裡的 Claude 呼叫 `run_sync`（儀表板的「立即同步」）。
 
 ## 5. 建立儀表板
 
@@ -108,7 +109,7 @@ powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1
 1. **檢查同步結果**：把 `latest.json`、`config.ini`（有信箱的話加 `mail.json`）拿進工作環境。先看 `latest.json` 的 `errors` 和 `log.txt` 最後幾行。登入失敗通常是學號打錯，或密碼要重跑 `set_password.py`。
 2. **產生頁面和資料**：用 daily-update 技能的 `scripts/build.py`，以 `--template` 指向 daily-update 技能的 `assets/dashboard.html`（第一次沒有 `--page` 也沒有 `--prev-dir`），同時帶 `--out new.html --db-out db`。
 3. **補寫信件摘要**：照 daily-update 技能第 4 步，替 `need_summary` 寫好摘要，再跑第二輪。
-4. **發佈**：用 Artifact 工具發佈成新頁面，`icon` 用 `calendar`，不帶 `url`，帶 `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}}`（頁面從自己的資料庫讀資料，只有擁有者能寫）。有做 4b、而且這是本機 session 的話，改帶 4b 那組。
+4. **發佈**：用 Artifact 工具發佈成新頁面，`icon` 用 `calendar`，不帶 `url`，帶 `capabilities: {"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "sample": {}, "mcp": {"servers": [{"server": "Claude Code Remote", "tools": ["fire_trigger"]}]}}`（頁面從自己的資料庫讀資料，只有擁有者能寫；`sample` 讓頁面替新信寫摘要；`fire_trigger` 給「立即同步」按鈕觸發每小時推資料的排程）。第 6 步建好「每小時推資料」排程後，用 ArtifactData `set` 寫 `dashboard/settings`：`{"push_trigger_id": "<那個排程的 trig_ id>", "last_push": null}`。
    接著照 daily-update 技能第 5 步，用 ArtifactData `batch` 把 `db/data.json`、`db/mail.json` 寫進 `dashboard/data`、`dashboard/mail`（第一次不帶 `if_version`）。之後每天只會更新這兩份資料，不會重新發佈頁面。
 5. **記下網址**：把拿到的網址寫回 `config.ini` 的 `[dashboard] artifact_url =`。只改這一行，其他行照原樣保留。
 
@@ -127,6 +128,18 @@ powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1
 這是全自動排程，沒人在旁邊，不要問問題，照技能的步驟做完。
 ```
 
+再建一個「BetterElearning 每小時推資料」，讓手機和瀏覽器不用等到每天那次：
+
+- 時間：台北時間 8 點到半夜每小時一次，錯開整點，例如 `cron_expression: "CRON_TZ=Asia/Taipei 20 0,8-23 * * *"`。
+- `requires_local_device: true`、`folders` 同上，`notifications: {}`（不推播）。
+- `prompt`：
+
+```text
+執行 BetterNDHUelearning 的每日更新的「快速模式」（better-ndhu-elearning 外掛的 daily-update 技能，文末那一節）：只推資料，不寫摘要、不推播、不發佈頁面。
+設定檔：<根資料夾>\_moodle\config.ini
+這是全自動排程，沒人在旁邊，不要問問題。
+```
+
 建好後，用一句話告訴使用者這個排程的核准設定。如果每次執行都要核准，提醒他可以在排程設定裡改成「自動核准」，不然沒人按核准就不會更新。
 
 ## 7. 收尾
@@ -134,6 +147,6 @@ powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1
 用幾句話告訴使用者：
 
 - 儀表板網址。建議用 Chrome / Edge 開，把分頁固定起來；如果裝了「直接開檔」，在瀏覽器裡點教材才打得開。
-- 每天 13:05 左右會自動更新。電腦沒開的那天不會更新。
+- 電腦開著時，信箱每 10 分鐘、e學苑每 30 分鐘同步一次；在 Claude 桌面版開著儀表板會即時更新，手機和瀏覽器最慢一小時。每天 13:05 左右那次會寫摘要、推播。電腦關機時會停在最後一次同步。
 - 排程有沒有在跑，可以在 `_moodle` 執行 `check_task.ps1` 查。
 - 查講義內容可以直接問 Claude，例如「哪堂課講過 deadlock」。

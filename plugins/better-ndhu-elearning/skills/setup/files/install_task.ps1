@@ -1,7 +1,11 @@
-﻿# 重新註冊 NDHU Moodle Sync 的兩個排程任務。
+﻿# 註冊 NDHU Moodle Sync 排程 (0.4 起): 登入後 3 分鐘一次 + 每 30 分鐘一次。
+# moodle_sync.py 自己會決定跑哪種: 每天第一次跑完整同步 (下載教材、建索引), 其他時候只跑十幾秒的輕量同步。
+# 舊版的「(logon)」「(daily)」兩個排程會一起移除。
 # 用法 (在 _moodle 資料夾):
 #   powershell -ExecutionPolicy Bypass -File .\install_task.ps1   (setup.ps1 也會自動叫它)
 # 不需要系統管理員權限 —— 這是註冊在你自己帳號底下的工作。
+param([int]$Minutes = 30)
+
 
 $here   = $PSScriptRoot
 if (-not $here) { $here = Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -79,45 +83,52 @@ Write-Host ('執行內容 : {0} "{1}"' -f $exe, $script) -ForegroundColor DarkGr
 Write-Host ''
 Write-Host '=== 註冊排程 ===' -ForegroundColor Cyan
 
+# 每 N 分鐘一次的觸發器 (開始時間設在今天 00:00, 之後一直重複; 關機期間錯過的會在開機後補跑一次)
+function New-EveryTrigger([int]$Minutes) {
+    try {
+        return New-ScheduledTaskTrigger -Once -At ((Get-Date).Date) -RepetitionInterval (New-TimeSpan -Minutes $Minutes) -ErrorAction Stop
+    } catch {
+        # 比較舊的 Windows: 改成「每天 00:00 開始, 24 小時內每 N 分鐘重複」
+        $t = New-ScheduledTaskTrigger -Daily -At '00:00'
+        $t.Repetition = (New-ScheduledTaskTrigger -Once -At '00:00' -RepetitionInterval (New-TimeSpan -Minutes $Minutes) `
+                         -RepetitionDuration (New-TimeSpan -Hours 23 -Minutes 59)).Repetition
+        return $t
+    }
+}
+
 $action = New-ScheduledTaskAction -Execute $exe -Argument ('"{0}"' -f $script) -WorkingDirectory $here
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
-    -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 10)
+    -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 1)
 
 $me = "{0}\{1}" -f $env:USERDOMAIN, $env:USERNAME
 # -User 一定要給: 不給的話等於「任何人登入都跑」, 那需要系統管理員權限, 會被擋成「存取被拒」
 $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $me
 try { $logonTrigger.Delay = 'PT3M' } catch { }
 
-$jobs = @(
-    @{ Name = 'NDHU Moodle Sync (logon)'; Trigger = $logonTrigger },
-    @{ Name = 'NDHU Moodle Sync (daily)'; Trigger = (New-ScheduledTaskTrigger -Daily -At '12:00') }
-)
-
-foreach ($j in $jobs) {
-    try {
-        Register-ScheduledTask -TaskName $j.Name -Action $action -Trigger $j.Trigger `
-            -Settings $settings -Force -ErrorAction Stop | Out-Null
-        Write-Host ("[OK] {0}" -f $j.Name) -ForegroundColor Green
-    } catch {
-        Write-Host ("[失敗] {0} -- {1}" -f $j.Name, $_.Exception.Message) -ForegroundColor Red
+$name = 'NDHU Moodle Sync'
+try {
+    Register-ScheduledTask -TaskName $name -Action $action -Trigger @($logonTrigger, (New-EveryTrigger $Minutes)) `
+        -Settings $settings -Force -ErrorAction Stop | Out-Null
+    Write-Host ("[OK] {0}  (登入時 + 每 {1} 分鐘)" -f $name, $Minutes) -ForegroundColor Green
+    foreach ($old in @('NDHU Moodle Sync (logon)', 'NDHU Moodle Sync (daily)')) {
+        if (Get-ScheduledTask -TaskName $old -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $old -Confirm:$false
+            Write-Host ("移除舊排程 {0}" -f $old) -ForegroundColor DarkGray
+        }
     }
+} catch {
+    Write-Host ("[失敗] {0} -- {1}" -f $name, $_.Exception.Message) -ForegroundColor Red
+    Write-Host '用內建的 schtasks 再試一次 (整行複製貼上):' -ForegroundColor Cyan
+    Write-Host ('schtasks /Create /TN "{0}" /TR "\"{1}\" \"{2}\"" /SC MINUTE /MO {3} /F' -f $name, $exe, $script, $Minutes) -ForegroundColor Yellow
+    return
 }
 
 Write-Host ''
-Write-Host '=== 註冊結果 ===' -ForegroundColor Cyan
-$ok = $true
-foreach ($j in $jobs) {
-    $t = Get-ScheduledTask -TaskName $j.Name -ErrorAction SilentlyContinue
-    if (-not $t) { Write-Host ("[X] {0} 還是沒有" -f $j.Name) -ForegroundColor Red; $ok = $false; continue }
+$t = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+if ($t) {
     $i = $t | Get-ScheduledTaskInfo
-    Write-Host ("[{0}] {1}   下次執行: {2}" -f $t.State, $j.Name, $i.NextRunTime) -ForegroundColor Green
-}
-
-if (-not $ok) {
-    Write-Host ''
-    Write-Host '用內建的 schtasks 再試一次 (整行複製貼上):' -ForegroundColor Cyan
-    Write-Host ('schtasks /Create /TN "NDHU Moodle Sync (daily)" /TR "\"{0}\" \"{1}\"" /SC DAILY /ST 12:00 /F' -f $exe, $script) -ForegroundColor Yellow
+    Write-Host ("[{0}] {1}   下次執行: {2}" -f $t.State, $name, $i.NextRunTime) -ForegroundColor Green
 }
 Write-Host ''

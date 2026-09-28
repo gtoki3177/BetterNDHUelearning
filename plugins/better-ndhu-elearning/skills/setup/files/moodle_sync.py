@@ -11,6 +11,13 @@ NDHU e學苑 (Moodle) 同步器
   5. 抽出 PDF/PPTX/DOCX/ZIP 內的文字, 建立 SQLite FTS5 全文索引
   6. 輸出 latest.json 給 Claude 讀
 
+兩種模式 (0.4 起):
+  完整 (heavy)  上面全部, 包括下載教材、建索引。每天第一次跑自動用這個; --force 強制。
+  輕量 (light)  只看課程頁、作業頁、行事曆 (繳交狀態、新作業、期限), 不下載。十幾秒就好,
+                排程每 30 分鐘跑一次。--light 強制。
+不帶參數 = 自動: 今天還沒跑過完整的就跑完整, 否則跑輕量 (10 分鐘內剛跑過就跳過)。
+內容沒變就不重寫 latest.json; 同一時間只會跑一個 (moodle.lock); 結果記在 status_moodle.json。
+
 密碼永遠不會以明文出現在這支程式或任何 log 裡。
 """
 
@@ -39,6 +46,11 @@ CRED_PATH = HERE / "cred.dat"
 DB_PATH = HERE / "state.db"
 JSON_PATH = HERE / "latest.json"
 LOG_PATH = HERE / "log.txt"
+LOCK_PATH = HERE / "moodle.lock"
+STATUS_PATH = HERE / "status_moodle.json"
+LOCK_STALE_MIN = 70          # 完整同步第一次可能要下載很多, 給久一點
+MIN_GAP_MIN = 10             # 自動模式: 距離上次同步不到這麼久就跳過
+LOG_MAX_BYTES = 1_000_000
 
 # 教材副檔名白名單 (下載)
 DOWNLOAD_EXT = {
@@ -66,6 +78,80 @@ def log(msg, level="INFO"):
             f.write(line + "\n")
     except OSError:
         pass
+
+
+def rotate_log():
+    try:
+        if LOG_PATH.exists() and LOG_PATH.stat().st_size > LOG_MAX_BYTES:
+            os.replace(LOG_PATH, LOG_PATH.with_name(LOG_PATH.stem + ".old.txt"))
+    except OSError:
+        pass
+
+
+def now_iso():
+    return dt.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def acquire_lock(mode):
+    """同一時間只讓一個同步在跑 (排程 + 儀表板的「立即同步」可能撞在一起)。拿不到回 False。"""
+    for _ in range(2):
+        try:
+            fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time.time() - LOCK_PATH.stat().st_mtime
+            except OSError:
+                continue
+            if age < LOCK_STALE_MIN * 60:
+                return False
+            try:
+                LOCK_PATH.unlink()
+            except OSError:
+                return False
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"pid": os.getpid(), "mode": mode, "started_at": now_iso()}, fh)
+        return True
+    return False
+
+
+def release_lock():
+    try:
+        LOCK_PATH.unlink()
+    except OSError:
+        pass
+
+
+def write_status(**kw):
+    st = {}
+    try:
+        st = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    st.update(kw)
+    tmp = STATUS_PATH.with_name(STATUS_PATH.name + ".tmp")
+    tmp.write_text(json.dumps(st, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, STATUS_PATH)
+
+
+def content_view(snap, with_new_files):
+    """比對「內容有沒有變」用: 拿掉時間戳、耗時、會隨時間變的剩餘天數。"""
+    if not snap:
+        return None
+    s = json.loads(json.dumps(snap))
+    s.pop("generated_at", None)
+    s.pop("mode", None)
+    if not with_new_files:
+        s.pop("new_files", None)
+    st = s.get("stats") or {}
+    s["stats"] = {k: st.get(k) for k in ("courses", "assignments", "pending", "indexed_files",
+                                          "indexed_chunks", "index", "total_files")}
+    for a in s.get("assignments", []):
+        a.pop("days_left", None)
+    for c in s.get("courses", []):
+        for a in c.get("assignments", []):
+            a.pop("days_left", None)
+    return json.dumps(s, ensure_ascii=False, sort_keys=True)
 
 
 def safe_name(name, maxlen=90):
@@ -566,7 +652,8 @@ def choose_semester(courses, want):
     return max(set(toks), key=semester_key)
 
 
-def run():
+def run(mode="heavy"):
+    light = mode == "light"
     cfg = configparser.ConfigParser()
     if not CONFIG_PATH.exists():
         raise SystemExit(f"找不到 {CONFIG_PATH}")
@@ -577,7 +664,7 @@ def run():
     username = S.get("username", "").strip()
     root = Path((S.get("root_folder") or "").strip() or str(HERE.parent))
     want_sem = S.get("semester", "auto")
-    do_download = S.getboolean("download_materials", True)
+    do_download = S.getboolean("download_materials", True) and not light
     do_index = S.getboolean("build_index", True)
     max_mb = S.getfloat("max_file_mb", 80.0)
     delay = S.getfloat("request_delay", 0.6)
@@ -589,6 +676,14 @@ def run():
 
     con = open_db()
     started = dt.datetime.now()
+    try:
+        prev = json.loads(JSON_PATH.read_text(encoding="utf-8")) if JSON_PATH.exists() else {}
+    except Exception:
+        prev = {}
+    # 輕量模式不下載, 教材的本機路徑和數量沿用上一次完整同步的結果
+    prev_local = {a.get("url"): a["local"] for c in prev.get("courses", [])
+                  for a in c.get("activities", []) if a.get("local")}
+    prev_materials = {c.get("id"): c.get("materials", 0) for c in prev.get("courses", [])}
     snapshot = {
         "generated_at": started.isoformat(timespec="seconds"),
         "semester": None,
@@ -601,7 +696,7 @@ def run():
     }
 
     # 索引格式換版, 或上次索引到一半掛掉 -> 先把舊檔補索引 (不需要網路)
-    if do_index:
+    if do_index and not light:
         stale = con.execute(
             "SELECT course, local_path FROM files WHERE indexed=0").fetchall()
         if stale:
@@ -625,12 +720,14 @@ def run():
     all_courses = mo.enrolled_courses()
     sem = choose_semester(all_courses, want_sem)
     snapshot["semester"] = sem
-    log(f"目標學期: {sem}  (選課總數 {len(all_courses)})")
+    if not light:
+        log(f"目標學期: {sem}  (選課總數 {len(all_courses)})")
 
     courses = [c for c in all_courses
                if sem and sem in (c.get("fullname") or "")
                and course_code(c.get("fullname")) not in skip_courses]
-    log(f"本學期課程 {len(courses)} 門")
+    if not light:
+        log(f"本學期課程 {len(courses)} 門")
 
     new_files_total = 0
     indexed_total = 0
@@ -806,9 +903,14 @@ def run():
             ps = loc.get(act["name"])
             if ps and act["type"] in ("resource", "folder"):
                 act["local"] = ps[0] if len(ps) == 1 else str(Path(ps[0]).parent)
+            elif light and act["url"] in prev_local and act["type"] in ("resource", "folder"):
+                act["local"] = prev_local[act["url"]]
+        if light:
+            entry["materials"] = prev_materials.get(cid, 0)
 
         snapshot["courses"].append(entry)
-        log(f"  {folder}: 活動 {len(acts)} / 作業 {len(entry['assignments'])} / 教材 {entry['materials']}")
+        if not light:   # 輕量模式一天跑幾十次, 只記總結那行
+            log(f"  {folder}: 活動 {len(acts)} / 作業 {len(entry['assignments'])} / 教材 {entry['materials']}")
 
     # ---- 行事曆 ----
     try:
@@ -824,6 +926,9 @@ def run():
     except Exception as e:
         snapshot["errors"].append(f"行事曆抓取失敗: {e}")
 
+    if light:
+        snapshot["new_files"] = prev.get("new_files", [])   # 「上次完整同步新下載的」, 留給每日更新回報
+    snapshot["mode"] = mode
     snapshot["assignments"].sort(key=lambda r: (r.get("due") is None, r.get("due") or ""))
     snapshot["events"].sort(key=lambda r: r["when"])
     snapshot["stats"] = {
@@ -841,10 +946,21 @@ def run():
         "elapsed_sec": round((dt.datetime.now() - started).total_seconds(), 1),
     }
 
-    JSON_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
-    meta_set(con, "last_success", started.isoformat(timespec="seconds"))
-    log(f"完成 — {snapshot['stats']}")
+    changed = content_view(snapshot, not light) != content_view(prev, not light)
+    if changed:
+        tmp = JSON_PATH.with_name(JSON_PATH.name + ".tmp")
+        tmp.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, JSON_PATH)
+    meta_set(con, "last_run", started.isoformat(timespec="seconds"))
+    if not light:
+        meta_set(con, "last_success", started.isoformat(timespec="seconds"))
+    st = snapshot["stats"]
+    if light:
+        log(f"輕量同步{'完成' if changed else ', 沒有變化'} — 作業 {st['assignments']} (未交 {st['pending']}) / {st['elapsed_sec']}s")
+    else:
+        log(f"完成{'' if changed else ' (沒有變化)'} — {st}")
     con.close()
+    return {"changed": changed, "pending": st["pending"], "assignments": st["assignments"]}
 
 
 def main():
@@ -853,34 +969,63 @@ def main():
     except Exception:
         pass
 
-    force = "--force" in sys.argv
+    argv = sys.argv[1:]
     con = open_db()
-    last = meta_get(con, "last_success")
+    last_heavy = meta_get(con, "last_success")
+    last_any = meta_get(con, "last_run") or last_heavy
     con.close()
-    if last and not force:
-        try:
-            if dt.datetime.fromisoformat(last).date() == dt.date.today():
-                log("今天已經同步過了, 跳過 (加 --force 可強制執行)")
-                return 0
-        except ValueError:
-            pass
 
-    try:
-        run()
+    def parse(v):
+        try:
+            return dt.datetime.fromisoformat(v) if v else None
+        except ValueError:
+            return None
+
+    if "--force" in argv or "--heavy" in argv:
+        mode = "heavy"
+    elif "--light" in argv:
+        mode = "light"
+    else:
+        lh, la = parse(last_heavy), parse(last_any)
+        if not lh or lh.date() != dt.date.today():
+            mode = "heavy"
+        elif la and (dt.datetime.now() - la).total_seconds() < MIN_GAP_MIN * 60:
+            return 0                                   # 剛跑過, 安靜跳過 (不寫 log)
+        else:
+            mode = "light"
+
+    rotate_log()
+    if not acquire_lock(mode):
+        log("另一個 e學苑同步還在跑, 這次跳過")
         return 0
-    except SystemExit:
+    write_status(started_at=now_iso(), mode=mode)
+    try:
+        res = run(mode)
+        fin = now_iso()
+        write_status(finished_at=fin, ok=True, error=None, changed=res["changed"],
+                     **({"changed_at": fin} if res["changed"] else {}),
+                     **({"last_heavy": fin} if mode == "heavy" else {}))
+        return 0
+    except SystemExit as exc:
+        write_status(finished_at=now_iso(), ok=False, error=str(exc.code))
         raise
     except Exception:
-        log("同步失敗:\n" + traceback.format_exc(), "ERROR")
-        # 讓 latest.json 也帶著錯誤, 儀表板才看得到
-        try:
-            prev = json.loads(JSON_PATH.read_text(encoding="utf-8")) if JSON_PATH.exists() else {}
-        except Exception:
-            prev = {}
-        prev["last_run_failed"] = dt.datetime.now().isoformat(timespec="seconds")
-        prev.setdefault("errors", []).append(traceback.format_exc().strip().splitlines()[-1])
-        JSON_PATH.write_text(json.dumps(prev, ensure_ascii=False, indent=2), encoding="utf-8")
+        tb = traceback.format_exc()
+        log(f"同步失敗 ({mode}):\n" + tb, "ERROR")
+        write_status(finished_at=now_iso(), ok=False, error=tb.strip().splitlines()[-1])
+        # 完整同步失敗才寫進 latest.json 讓儀表板看得到;
+        # 輕量同步一天幾十次, 偶爾網路抖一下不要洗版 (狀態在 status_moodle.json)
+        if mode == "heavy":
+            try:
+                prev = json.loads(JSON_PATH.read_text(encoding="utf-8")) if JSON_PATH.exists() else {}
+            except Exception:
+                prev = {}
+            prev["last_run_failed"] = dt.datetime.now().isoformat(timespec="seconds")
+            prev.setdefault("errors", []).append(tb.strip().splitlines()[-1])
+            JSON_PATH.write_text(json.dumps(prev, ensure_ascii=False, indent=2), encoding="utf-8")
         return 1
+    finally:
+        release_lock()
 
 
 if __name__ == "__main__":

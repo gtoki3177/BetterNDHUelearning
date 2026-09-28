@@ -21,7 +21,8 @@
 | `set_password.py` | 用 Windows DPAPI 加密存密碼到 `cred.dat`。**只有你會跑這支** |
 | `search.py` | 教材全文檢索 CLI |
 | `setup.ps1` | 裝套件 + 叫 `install_task.ps1` 註冊工作排程器任務 |
-| `install_task.ps1` | 註冊 Moodle 同步的兩個排程 (登入時 + 每天 12:00) |
+| `install_task.ps1` | 註冊 Moodle 同步排程「NDHU Moodle Sync」(登入時 + 每 30 分鐘) |
+| `status_moodle.json` / `moodle.lock` | 上次同步的結果 / 正在同步中 (給儀表板的「立即同步」看) |
 | `check_task.ps1` | 看排程上次執行結果和下次時間 |
 | `install_open_local.ps1` / `open_local.ps1` / `open_local.vbs` | (選用) 讓儀表板點教材直接開檔 |
 | `config.ini` | 設定：帳號、學期、要不要下載、跳過哪些課、儀表板設定 (從 `config.example.ini` 產生) |
@@ -85,11 +86,11 @@ python moodle_sync.py --force
 
 **不想同步軍訓體育那些** → `config.ini` 的 `skip_courses` 填課號，逗號分隔。
 
-**手動跑一次** → `python moodle_sync.py --force`（不加 `--force` 的話同一天跑第二次會直接跳過）。
+**手動跑一次** → `python moodle_sync.py --force`（完整同步）或 `python moodle_sync.py --light`（只看作業和期限）。不帶參數是自動模式：當天第一次跑完整的，之後跑輕量的，10 分鐘內剛跑過就跳過。在 Claude 桌面版開儀表板也可以直接按「立即同步」。
 
 **拆掉排程** →
 ```powershell
-Unregister-ScheduledTask -TaskName 'NDHU Moodle Sync (logon)','NDHU Moodle Sync (daily)'
+Unregister-ScheduledTask -TaskName 'NDHU Moodle Sync'
 ```
 
 ---
@@ -105,7 +106,8 @@ gms 信箱就是 Gmail，所以走 IMAP 抓，跟 Moodle 那套同一個模式�
 |---|---|
 | `mail_sync.py` | 主程式。IMAP 登入 → 抓最近的信 → 寫 `mail.json` |
 | `set_mail_password.py` | 把 Gmail **應用程式密碼** 加密存成 `mail_cred.dat`。**只有你會跑這支** |
-| `install_mail_task.ps1` | 註冊每天 12:20 的工作排程（Moodle 那支是 12:00，錯開） |
+| `install_mail_task.ps1` | 註冊「NDHU Mail Sync」排程（登入時 + 每 10 分鐘；增量同步，一次幾秒） |
+| `status_mail.json` / `mail.lock` | 上次同步的結果 / 正在同步中 |
 | `mail.json` | 最新快照，給 Claude 讀 |
 | `mail_log.txt` | 執行紀錄 |
 | `mail_cred.dat` | 加密後的應用程式密碼。**不要傳給任何人，包括 Claude** |
@@ -161,5 +163,5 @@ python mail_sync.py --stats                 # 看上次抓到什麼
 
 **拆掉排程** →
 ```powershell
-Unregister-ScheduledTask -TaskName 'NDHU Mail Sync (daily)'
+Unregister-ScheduledTask -TaskName 'NDHU Mail Sync'
 ```

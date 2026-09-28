@@ -9,6 +9,11 @@ latest.json
 mail.json
 log.txt
 mail_log.txt
+*.old.txt
+status_*.json
+*.lock
+*.tmp
+_backup_*/
 open_local_log.txt
 *.part
 _check_imports.py

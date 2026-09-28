@@ -5,7 +5,14 @@ description: 每天更新東華大學 e學苑 / gms 信箱的 BetterElearning �
 
 # BetterElearning 每日更新
 
-使用者電腦上的 `moodle_sync.py`（抓 e學苑 → `latest.json`）和 `mail_sync.py`（IMAP 讀 gms 信箱 → `mail.json`）由 Windows 工作排程器每天跑。這個技能只負責把兩份 JSON 讀進來、寫好信件摘要，更新到儀表板的資料庫。
+使用者電腦上的 `moodle_sync.py`（抓 e學苑 → `latest.json`，每 30 分鐘）和 `mail_sync.py`（IMAP 讀 gms 信箱 → `mail.json`，每 10 分鐘）由 Windows 工作排程器常駐跑，內容沒變就不重寫檔案。這個技能只負責把兩份 JSON 讀進來、寫好信件摘要，更新到儀表板的資料庫。
+
+從 0.4 起，儀表板頁面自己也會寫資料庫：在 Claude 桌面版開著時會把比資料庫新的本機資料存進去，也會替還沒摘要的「需注意」新信寫摘要。所以寫回資料庫時一定要帶 `if_version`（第 5 步），被拒絕就重讀再做。
+
+這個技能有兩種跑法：
+
+- **每日更新**（預設）：下面第 0–7 步全部做。
+- **快速模式**：排程的指示寫「快速模式」時只做「只推資料」，見文末。
 
 - 不要自己連 `elearn4.ndhu.edu.tw` 或 `imap.gmail.com`：雲端環境連不到，抓資料永遠是本機腳本的事。
 - 不要碰 `cred.dat`、`mail_cred.dat`（加密的密碼），不要讀、不要搬。
@@ -159,3 +166,16 @@ python3 <本技能資料夾>/scripts/build.py \
 - **校園公告**：主旨含「批次寄送」；或寄件者是 `announce@gms.ndhu.edu.tw`，但命中的強關鍵字少於兩個。
 - **需注意**：其他所有信，加上命中兩個以上強關鍵字的 announce 信。
 - **強關鍵字**：截止 / 逾期 / 繳費 / 選課 / 停課 / 補課 / 調課 / 成績 / 獎學金 / 考試 / 註冊 / 重要。
+
+## 快速模式（每小時的「只推資料」）
+
+目的：讓手機和瀏覽器看到的資料不用等到每天那次。不寫摘要、不推播、不發佈 HTML，儘量少花額度。
+
+0. 排程訊息後面附了「立即同步」（使用者按了儀表板的按鈕）時：先呼叫本機 betterel 的 `run_sync`（`target: "all"`），再每 15 秒呼叫 `get_dashboard_data` 只看 `sync` 欄位，等 moodle、mail 都不是 `running` 而且 `finished_at` 晚於 `run_sync` 回傳的 `requested_at`（最多 3 分鐘）。沒有 betterel 工具就跳過。
+1. 照第 0、1 步拿到 `latest.json`、`mail.json`、`config.ini`。連不到電腦就跳到第 6 步。
+2. 照第 2 步把 `dashboard` 讀進 `prev`，記下兩份文件的 `version`。
+3. 比對：`latest.json` 的 `generated_at` 和 `prev` 裡 data 文件的 `generated_at` 指的是同一個時間（build.py 會補上 `+08:00`，比的時候忽略這個差別），而且 `mail.json` 和 mail 文件的 `generated_at` 也一樣 → 回一句「沒有新東西」就結束。
+4. 否則跑一般流程的 `build.py`，多加 `--no-upgrade`，不要帶 `--summaries`。
+5. 照第 5 步用 `batch` 寫回兩份文件（帶 `if_version`）。版本不符就重做第 2–5 步一次；再失敗就結束，下個小時會再試。
+6. **一定要做**：ArtifactData `update` `dashboard/settings`，`{"last_push": {"at": "<現在，ISO 8601 含 +08:00>", "result": "<一句話結果>"}}`。儀表板靠它知道「立即同步」做完了、顯示「最後檢查」。
+7. 回報同一句話。不要推播。

@@ -12,7 +12,12 @@ NDHU gms 信箱同步 — 用 IMAP 把最近的信抓成 mail.json。
     python mail_sync.py --test         # 只登入試試, 不寫檔
     python mail_sync.py                # 正式跑一次
 
+增量同步 (0.4 起): 已經抓過的信只重讀「已讀/未讀」狀態, 只有新信才下載內文,
+所以一次只要幾秒, 排程每 10 分鐘跑一次也不會吃資源。內容沒變就不重寫 mail.json。
+同一時間只會跑一個 (mail.lock); 每次的結果記在 status_mail.json, 給 betterel 看。
+
 常用:
+    python mail_sync.py --full         # 忽略快取, 全部重抓
     python mail_sync.py --days 30 --limit 120
     python mail_sync.py --unread-only
     python mail_sync.py --no-body      # 只抓標題寄件者, 不抓內文
@@ -26,6 +31,7 @@ import email
 import html as html_mod
 import imaplib
 import json
+import os
 import re
 import sys
 import time
@@ -39,6 +45,11 @@ CONFIG_PATH = HERE / "config.ini"
 CRED_PATH = HERE / "mail_cred.dat"
 OUT_PATH = HERE / "mail.json"
 LOG_PATH = HERE / "mail_log.txt"
+LOCK_PATH = HERE / "mail.lock"
+STATUS_PATH = HERE / "status_mail.json"
+LOCK_STALE_MIN = 15      # 鎖超過這麼久還在 = 上次當掉了, 直接接手
+NEW_HOURS = 24           # 第一次看到在 24 小時內的信算「新信」(每日更新靠它推播)
+LOG_MAX_BYTES = 1_000_000
 
 TZ = timezone(timedelta(hours=8))
 CRED_DESC = "ndhu-mail-sync"
@@ -73,6 +84,60 @@ def log(msg, level="INFO"):
             fh.write(line + "\n")
     except Exception:
         pass
+
+
+def rotate_log():
+    try:
+        if LOG_PATH.exists() and LOG_PATH.stat().st_size > LOG_MAX_BYTES:
+            os.replace(LOG_PATH, LOG_PATH.with_name(LOG_PATH.stem + ".old.txt"))
+    except OSError:
+        pass
+
+
+def now_iso():
+    return datetime.now(TZ).isoformat(timespec="seconds")
+
+
+def acquire_lock(mode):
+    """同一時間只讓一個同步在跑。拿不到鎖回 False。"""
+    for _ in range(2):
+        try:
+            fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time.time() - LOCK_PATH.stat().st_mtime
+            except OSError:
+                continue                      # 剛好被刪掉, 再搶一次
+            if age < LOCK_STALE_MIN * 60:
+                return False
+            try:
+                LOCK_PATH.unlink()            # 上次當掉留下的舊鎖
+            except OSError:
+                return False
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"pid": os.getpid(), "mode": mode, "started_at": now_iso()}, fh)
+        return True
+    return False
+
+
+def release_lock():
+    try:
+        LOCK_PATH.unlink()
+    except OSError:
+        pass
+
+
+def write_status(**kw):
+    st = {}
+    try:
+        st = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    st.update(kw)
+    tmp = STATUS_PATH.with_name(STATUS_PATH.name + ".tmp")
+    tmp.write_text(json.dumps(st, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, STATUS_PATH)
 
 
 def as_bool(v, fallback=False):
@@ -257,6 +322,11 @@ def search_uids(box, cfg, days, unread_only):
     typ, _ = box.select(f'"{folder}"', readonly=True)
     if typ != "OK":
         raise SystemExit(f"打不開信件匣 {folder!r} — 檢查 config.ini 的 folder")
+    try:
+        _t, uv = box.response("UIDVALIDITY")
+        uidvalidity = (uv[0].decode() if uv and uv[0] else None)
+    except Exception:
+        uidvalidity = None
     since = (datetime.now(TZ) - timedelta(days=days)).strftime("%d-%b-%Y")
     crit = [f'SINCE "{since}"']
     if unread_only:
@@ -265,27 +335,92 @@ def search_uids(box, cfg, days, unread_only):
     if typ != "OK":
         raise SystemExit("IMAP search 失敗")
     uids = (data[0] or b"").split()
-    return [u.decode() for u in uids]
+    return [u.decode() for u in uids], uidvalidity
 
 
-def fetch_one(box, uid, cfg, want_body):
-    typ, data = box.uid("fetch", uid, "(UID FLAGS X-GM-THRID RFC822.SIZE)")
-    if typ != "OK" or not data or not data[0]:
-        return None
-    head_blob = data[0][0] if isinstance(data[0], tuple) else data[0]
-    meta = parse_meta(head_blob)
+def bulk_meta(box, uids):
+    """一個來回拿到所有 uid 的 FLAGS / thread id / 大小 (不抓內容)。"""
+    out = {}
+    for k in range(0, len(uids), 200):
+        chunk = uids[k:k + 200]
+        typ, data = box.uid("fetch", ",".join(chunk), "(UID FLAGS X-GM-THRID RFC822.SIZE)")
+        if typ != "OK":
+            raise SystemExit("IMAP 讀旗標失敗")
+        for item in data or []:
+            blob = item[0] if isinstance(item, tuple) else item
+            if not isinstance(blob, (bytes, bytearray)):
+                continue
+            meta = parse_meta(blob)
+            if meta["uid"]:
+                out[meta["uid"]] = meta
+    return out
 
+
+def fetch_message(box, uid, meta, cfg, want_body):
     max_bytes = int(cfg["max_fetch_kb"]) * 1024
-    heavy = meta["size"] and meta["size"] > max_bytes
+    heavy = bool(meta["size"] and meta["size"] > max_bytes)
     spec = "(BODY.PEEK[HEADER])" if (heavy or not want_body) else "(BODY.PEEK[])"
     typ, data = box.uid("fetch", uid, spec)
     if typ != "OK" or not data or not isinstance(data[0], tuple):
         return None
-    msg = email.message_from_bytes(data[0][1])
-    return meta, msg, heavy
+    return email.message_from_bytes(data[0][1]), heavy
+
+
+def make_record(uid, meta, msg, heavy, cfg, want_body, body_chars, keywords, skip_senders):
+    """把一封信整理成 mail.json 的一筆。寄件者在 skip_senders 裡就回 None。"""
+    # 先把整行 From 解碼再拆, 有些信會把「名字 <位址>」整串編碼掉
+    from_name, from_addr = parseaddr(decode_mime(msg.get("From", "")))
+    from_name = (from_name or from_addr).strip()
+    from_addr = (from_addr or "").lower()
+    if any(s in from_addr for s in skip_senders):
+        return None
+
+    subject = decode_mime(msg.get("Subject", "")) or "(無主旨)"
+    try:
+        dt = parsedate_to_datetime(msg.get("Date", ""))
+        dt = dt.astimezone(TZ) if dt.tzinfo else dt.replace(tzinfo=TZ)
+    except Exception:
+        dt = datetime.now(TZ)
+
+    body, truncated = ("", False)
+    if want_body and not heavy:
+        body, truncated = extract_body(msg, body_chars)
+
+    haystack = f"{subject}\n{body}"
+    hits = [k for k in keywords if k in haystack]
+
+    thrid = meta.get("thrid")
+    link = (f"https://mail.google.com/mail/u/?authuser={cfg['address']}"
+            f"#all/{int(thrid):x}") if thrid else \
+           f"https://mail.google.com/mail/u/?authuser={cfg['address']}"
+
+    return {
+        "uid": meta.get("uid") or uid,
+        "date": dt.isoformat(timespec="seconds"),
+        "from_name": from_name,
+        "from_addr": from_addr,
+        "to": decode_mime(msg.get("To", "")),
+        "subject": subject,
+        "unread": "\\Seen" not in meta["flags"],
+        "starred": "\\Flagged" in meta["flags"],
+        "attachments": attachment_names(msg),
+        "body": body,
+        "body_truncated": truncated or heavy,
+        "size_kb": round(meta["size"] / 1024, 1) if meta["size"] else None,
+        "keywords": hits,
+        "link": link,
+    }
+
+
+CONTENT_KEYS = ("account", "folder", "window_days", "include_body", "messages")
+
+
+def content_key(p):
+    return json.dumps({k: (p or {}).get(k) for k in CONTENT_KEYS}, ensure_ascii=False, sort_keys=True)
 
 
 def run_sync(args):
+    """回傳 {"changed", "total", "unread", "fetched"}; --test 時回 {"test": True}。"""
     cfg = load_config()
     if not cfg.get("address"):
         raise SystemExit("config.ini 的 [mail] 沒有 address — 填上 你的學號@gms.ndhu.edu.tw")
@@ -300,108 +435,104 @@ def run_sync(args):
     keywords = [k.strip() for k in cfg["highlight_keywords"].split(",") if k.strip()]
 
     started = time.time()
+    now = datetime.now(TZ)
     password = load_password()
     box = connect(cfg, password)
     del password
 
     try:
-        uids = search_uids(box, cfg, days, unread_only)
-        log(f"最近 {days} 天共 {len(uids)} 封" + (" (只看未讀)" if unread_only else ""))
+        uids, uidvalidity = search_uids(box, cfg, days, unread_only)
         if args.test:
+            log(f"最近 {days} 天共 {len(uids)} 封" + (" (只看未讀)" if unread_only else ""))
             log("--test: 只驗證登入, 不寫檔")
-            return 0
+            return {"test": True}
         uids = uids[-limit:]
 
-        previous = {}
+        prev = {}
         if OUT_PATH.exists():
             try:
-                old = json.loads(OUT_PATH.read_text(encoding="utf-8"))
-                previous = {m.get("uid"): m for m in old.get("messages", [])}
+                prev = json.loads(OUT_PATH.read_text(encoding="utf-8"))
             except Exception:
-                previous = {}
+                prev = {}
+        # 快取只在「同一個信箱、同一個信件匣、UID 沒被重排」時能沿用
+        reuse = (not args.full and uidvalidity is not None
+                 and prev.get("uidvalidity") == uidvalidity
+                 and prev.get("account") == cfg["address"]
+                 and prev.get("folder") == cfg["folder"]
+                 and prev.get("include_body", True) == want_body)
+        previous = {m.get("uid"): m for m in prev.get("messages", [])} if reuse else {}
+        # 就算要重抓內文, 「第一次看到的時間」還是沿用 (不然升級那次每封都會被當成新信推播)
+        known = ({m.get("uid"): m for m in prev.get("messages", [])}
+                 if prev.get("account") == cfg["address"] and prev.get("uidvalidity") in (None, uidvalidity) else {})
+        prev_gen = prev.get("generated_at") or now.isoformat(timespec="seconds")
 
-        messages, skipped = [], 0
+        def first_seen_of(old):
+            if old.get("first_seen"):
+                return old["first_seen"]
+            # 0.3 以前的 mail.json 沒記: 上次標成新信的算上次同步, 其他用寄信時間
+            return prev_gen if old.get("new") else min(old.get("date") or prev_gen, prev_gen)
+        new_since = (now - timedelta(hours=NEW_HOURS)).isoformat(timespec="seconds")
+
+        metas = bulk_meta(box, uids)
+        messages, skipped, fetched = [], 0, 0
         for uid in reversed(uids):          # 新的在前面
-            try:
-                got = fetch_one(box, uid, cfg, want_body)
-            except Exception as exc:
-                log(f"uid {uid} 抓失敗: {exc}", "WARN")
+            meta = metas.get(uid)
+            if not meta:
                 continue
-            if not got:
-                continue
-            meta, msg, heavy = got
-
-            # 先把整行 From 解碼再拆, 有些信會把「名字 <位址>」整串編碼掉
-            from_name, from_addr = parseaddr(decode_mime(msg.get("From", "")))
-            from_name = (from_name or from_addr).strip()
-            from_addr = (from_addr or "").lower()
-            if any(s in from_addr for s in skip_senders):
-                skipped += 1
-                continue
-
-            subject = decode_mime(msg.get("Subject", "")) or "(無主旨)"
-            try:
-                dt = parsedate_to_datetime(msg.get("Date", ""))
-                dt = dt.astimezone(TZ) if dt.tzinfo else dt.replace(tzinfo=TZ)
-            except Exception:
-                dt = datetime.now(TZ)
-
-            body, truncated = ("", False)
-            if want_body and not heavy:
-                body, truncated = extract_body(msg, body_chars)
-
-            haystack = f"{subject}\n{body}"
-            hits = [k for k in keywords if k in haystack]
-
-            thrid = meta.get("thrid")
-            link = (f"https://mail.google.com/mail/u/?authuser={cfg['address']}"
-                    f"#all/{int(thrid):x}") if thrid else \
-                   f"https://mail.google.com/mail/u/?authuser={cfg['address']}"
-
-            messages.append({
-                "uid": meta.get("uid") or uid,
-                "date": dt.isoformat(timespec="seconds"),
-                "from_name": from_name,
-                "from_addr": from_addr,
-                "to": decode_mime(msg.get("To", "")),
-                "subject": subject,
-                "unread": "\\Seen" not in meta["flags"],
-                "starred": "\\Flagged" in meta["flags"],
-                "attachments": attachment_names(msg),
-                "body": body,
-                "body_truncated": truncated or heavy,
-                "size_kb": round(meta["size"] / 1024, 1) if meta["size"] else None,
-                "keywords": hits,
-                "link": link,
-                "new": (meta.get("uid") or uid) not in previous,
-            })
-            if delay:
-                time.sleep(delay)
+            old = previous.get(uid)
+            if old and old.get("from_addr") is not None:
+                if any(s in (old.get("from_addr") or "") for s in skip_senders):
+                    skipped += 1
+                    continue
+                rec = dict(old)
+                rec["unread"] = "\\Seen" not in meta["flags"]
+                rec["starred"] = "\\Flagged" in meta["flags"]
+                rec["first_seen"] = first_seen_of(old)
+            else:
+                try:
+                    got = fetch_message(box, uid, meta, cfg, want_body)
+                except Exception as exc:
+                    log(f"uid {uid} 抓失敗: {exc}", "WARN")
+                    continue
+                if not got:
+                    continue
+                msg, heavy = got
+                fetched += 1
+                rec = make_record(uid, meta, msg, heavy, cfg, want_body, body_chars, keywords, skip_senders)
+                if rec is None:
+                    skipped += 1
+                    continue
+                rec["first_seen"] = first_seen_of(known[uid]) if uid in known else now.isoformat(timespec="seconds")
+                if delay:
+                    time.sleep(delay)
+            rec["new"] = rec["first_seen"] >= new_since
+            messages.append(rec)
 
         messages.sort(key=lambda m: m["date"], reverse=True)
-        payload = {
-            "generated_at": datetime.now(TZ).isoformat(timespec="seconds"),
-            "account": cfg["address"],
-            "folder": cfg["folder"],
-            "window_days": days,
-            "messages": messages,
-            "stats": {
-                "total": len(messages),
-                "unread": sum(1 for m in messages if m["unread"]),
-                "new": sum(1 for m in messages if m["new"]),
-                "with_attachments": sum(1 for m in messages if m["attachments"]),
-                "highlighted": sum(1 for m in messages if m["keywords"]),
-                "skipped_senders": skipped,
-                "elapsed_sec": round(time.time() - started, 1),
-            },
+        body = {"account": cfg["address"], "folder": cfg["folder"], "window_days": days,
+                "include_body": want_body, "uidvalidity": uidvalidity, "messages": messages}
+        changed = content_key(body) != content_key(prev)
+        elapsed = round(time.time() - started, 1)
+        stats = {
+            "total": len(messages),
+            "unread": sum(1 for m in messages if m["unread"]),
+            "new": sum(1 for m in messages if m["new"]),
+            "with_attachments": sum(1 for m in messages if m["attachments"]),
+            "highlighted": sum(1 for m in messages if m["keywords"]),
+            "skipped_senders": skipped,
+            "fetched": fetched,
+            "elapsed_sec": elapsed,
         }
-        tmp = OUT_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(OUT_PATH)
-        s = payload["stats"]
-        log(f"完成 — {s['total']} 封 / 未讀 {s['unread']} / 新增 {s['new']} / "
-            f"關鍵字命中 {s['highlighted']} / {s['elapsed_sec']}s")
-        return 0
+        if changed:
+            payload = {"generated_at": now.isoformat(timespec="seconds"), **body, "stats": stats}
+            tmp = OUT_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(OUT_PATH)
+            log(f"完成 — {stats['total']} 封 / 未讀 {stats['unread']} / 新下載 {fetched} / "
+                f"關鍵字命中 {stats['highlighted']} / {elapsed}s")
+        else:
+            log(f"沒有變化 — {stats['total']} 封 / 未讀 {stats['unread']} / {elapsed}s")
+        return {"changed": changed, "total": stats["total"], "unread": stats["unread"], "fetched": fetched}
     finally:
         try:
             box.logout()
@@ -473,6 +604,7 @@ def main():
     ap.add_argument("--unread-only", action="store_true", help="只抓未讀")
     ap.add_argument("--no-body", action="store_true", help="不抓內文, 只留標題寄件者")
     ap.add_argument("--test", action="store_true", help="只驗證登入, 不寫檔")
+    ap.add_argument("--full", action="store_true", help="忽略上次的結果, 每封信都重新下載")
     ap.add_argument("--stats", action="store_true", help="印出 mail.json 的摘要")
     ap.add_argument("--check-cred", action="store_true",
                     help="檢查存起來的密碼長相 (不會印出密碼本身)")
@@ -482,13 +614,30 @@ def main():
         return check_cred()
     if args.stats:
         return show_stats()
+    if args.test:
+        run_sync(args)
+        return 0
+
+    rotate_log()
+    if not acquire_lock("full" if args.full else "incremental"):
+        log("另一個信箱同步還在跑, 這次跳過")
+        return 0
+    write_status(started_at=now_iso())
     try:
-        return run_sync(args)
-    except SystemExit:
+        res = run_sync(args)
+        fin = now_iso()
+        write_status(finished_at=fin, ok=True, error=None, changed=res["changed"],
+                     unread=res["unread"], **({"changed_at": fin} if res["changed"] else {}))
+        return 0
+    except SystemExit as exc:
+        write_status(finished_at=now_iso(), ok=False, error=str(exc.code))
         raise
     except Exception as exc:
         log(f"未預期的錯誤: {exc!r}", "ERROR")
+        write_status(finished_at=now_iso(), ok=False, error=repr(exc))
         return 1
+    finally:
+        release_lock()
 
 
 if __name__ == "__main__":

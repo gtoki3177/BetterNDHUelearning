@@ -2,7 +2,10 @@
 # 用法: 在 _moodle 資料夾按右鍵 -> 在終端中開啟, 然後:
 #   powershell -ExecutionPolicy Bypass -File .\check_task.ps1
 
-$names = @('NDHU Moodle Sync (logon)', 'NDHU Moodle Sync (daily)', 'NDHU Mail Sync (daily)')
+$names = @('NDHU Moodle Sync', 'NDHU Mail Sync')
+# 0.3 以前的舊名字: 還在的話也列出來 (重跑 install_task.ps1 / install_mail_task.ps1 會換成新的)
+$names += @('NDHU Moodle Sync (logon)', 'NDHU Moodle Sync (daily)', 'NDHU Mail Sync (daily)') |
+    Where-Object { Get-ScheduledTask -TaskName $_ -ErrorAction SilentlyContinue }
 
 $codes = @{
     0          = '成功'
@@ -46,7 +49,8 @@ Write-Host ''
 Write-Host '--- 常見情況 ---' -ForegroundColor Cyan
 Write-Host '沒有註冊 / State=Disabled  -> 重跑一次 setup.ps1 就會重新註冊'
 Write-Host '上次結果不是 0            -> 照上面「執行內容」那行手動跑一次, 看錯在哪'
-Write-Host '上次執行時間很舊          -> 12:00 那個時段電腦是關機或睡眠; 開機後會自己補跑一次'
+Write-Host '上次執行時間很舊          -> 電腦關機或睡眠中; 開機後會自己補跑一次'
+Write-Host '同步狀態 (上次跑完、有沒有出錯) -> 看 status_moodle.json / status_mail.json'
 Write-Host ''
 Write-Host '手動跑一次: ' -NoNewline
 Write-Host ('python "{0}" --force' -f (Join-Path $PSScriptRoot 'moodle_sync.py')) -ForegroundColor Yellow
