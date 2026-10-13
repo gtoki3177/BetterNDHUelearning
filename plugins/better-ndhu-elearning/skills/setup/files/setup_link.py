@@ -17,7 +17,7 @@ KEYS = ("apiKey", "authDomain", "projectId", "storageBucket", "messagingSenderId
 
 
 def parse(text):
-    m = re.search(r"\{[\s\S]*\}", text)
+    m = re.search(r"\{[^{}]*apiKey[^{}]*\}", text)   # 只抓含 apiKey 的那段 (前面可能有 import { initializeApp })
     if not m:
         sys.exit("找不到 firebaseConfig 的 { ... }")
     body = re.sub(r"//[^\n]*", "", m.group(0))
