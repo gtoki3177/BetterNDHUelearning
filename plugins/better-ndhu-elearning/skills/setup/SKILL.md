@@ -1,18 +1,17 @@
 ---
 name: setup
-description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網頁版，雲端每小時同步東華 e學苑和 gms 信箱，電腦不用開）或輕量安裝（Claude artifact 儀表板，電腦開著才更新）。Use when the user says「幫我設定 BetterNDHUelearning」「安裝 BetterElearning」「設定 e學苑儀表板」「我要裝 BetterElearning app」「set up BetterNDHUelearning」, or asks to reinstall / upgrade it.
+description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網頁版，雲端每小時同步東華 e學苑和 gms 信箱，電腦不用開）或輕量安裝（Claude artifact 儀表板，電腦開著才更新），以及完整安裝後的選用設定（立即同步、Claude 信件摘要、講義下載）。Use when the user says「幫我設定 BetterNDHUelearning」「安裝 BetterElearning」「設定 e學苑儀表板」「我要裝 BetterElearning app」「BetterElearning 的選用設定」「set up BetterNDHUelearning」, or asks to reinstall / upgrade it.
 ---
 
 # BetterNDHUelearning 安裝
 
-帶使用者一步步裝好。使用者多半不是工程背景：講白話，一次只給一小段要做的事，等他說做好了再往下。
+使用者多半不是工程背景：講白話，一次只給一小段要做的事。很多人是 Pro 方案、額度不多，所以**能讓腳本做的就不要自己一步步跑**，回覆也簡短。
 
 ## 硬規則
 
-- **不碰密碼**：絕對不要叫使用者把 e學苑密碼、Gmail 應用程式密碼、Firebase 帳號密碼、GitHub token 貼進對話。這些只在他自己的終端機或瀏覽器裡輸入。使用者如果自己貼了，請他去改密碼，你也不要把它寫進任何檔案。
-- **不讀金鑰**：Firebase 服務帳戶金鑰（`firebase-sa.json`）只用指令把它整個檔案交給 `gh secret set`，不要打開、印出或複製內容。`cred.dat`、`mail_cred.dat` 也不讀、不搬。
+- **不碰密碼**：絕對不要叫使用者把 e學苑密碼、Gmail 應用程式密碼、Firebase 帳號密碼、GitHub token 貼進對話。使用者如果自己貼了，請他去改密碼，你也不要寫進任何檔案。
+- **不讀金鑰**：不要打開或印出 `firebase-sa.json`、`cred.dat`、`mail_cred.dat`。
 - **不連學校**：不自己連 `elearn4.ndhu.edu.tw` 或 `imap.gmail.com`。
-- **不覆蓋**：使用者已經有的 `config.ini`、`state.db`、同步引擎 repo 一律不覆蓋；要換之前先講清楚會換掉什麼。
 
 ## 0. 選安裝方式
 
@@ -20,151 +19,50 @@ description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網�
 
 | 選項 | 適合誰 |
 |---|---|
-| **完整安裝（推薦）** | 想在手機上用 app、電腦關機也要更新。需要 GitHub 和 Google 帳號（免費），任何作業系統都可以，裝完不需要電腦開著。 |
-| **輕量安裝** | 只想在 Claude 裡看儀表板。只支援 Windows，電腦和 Claude 桌面版開著才會更新。 |
+| **完整安裝（推薦）** | 想在手機上用 app、電腦關機也要更新。需要 GitHub 和個人 Google 帳號（免費），任何作業系統。 |
+| **輕量安裝** | 只想在 Claude 裡看儀表板。只支援 Windows，電腦和 Claude 桌面版開著才會更新，每天的排程會花 Claude 額度。 |
 
-選輕量安裝：讀本技能資料夾的 `LITE.md`，照它做完就結束。以下都是完整安裝。
+選輕量安裝：讀本技能資料夾的 `LITE.md`，照它做。以下是完整安裝。
 
-## 完整安裝在做什麼（先用兩三句講給使用者聽）
+## 1. 完整安裝：跑安裝腳本
 
-- **GitHub**（免費）在雲端每小時登入 e學苑和 gms 信箱一次，把作業和信件整理好。
-- **Firebase**（Google 的免費資料庫）存這些資料和你的釘選、備忘，只有你的帳號讀得到。
-- **BetterElearning app**（Android）和網頁版 `https://betterel.web.app` 從你的 Firebase 讀資料。大家共用同一個 app，第一次打開時掃一個專屬 QR code，就會連到你自己的資料。
-- 電腦開著的話可以再加兩樣（選用）：下載講義到電腦並建全文檢索、讓 Claude 替重要的信寫摘要。
+先用兩三句講給他聽：GitHub（免費）在雲端每小時登入 e學苑和信箱一次，結果存進他自己的 Firebase（Google 的免費資料庫），手機 app 和網頁版 `https://betterel.web.app` 從那裡讀；app 是大家共用的，掃他自己的 QR code 才會連到他的資料。
 
-這一定要在 **Claude 桌面版的本機 session** 做（要在使用者電腦上執行指令）。雲端 session 的話，請使用者改用桌面版。
+1. 確認工具（用 Bash 跑 `git --version; gh --version; node --version; python --version`）。缺的請他自己裝，裝完**重開終端機**：
+   `winget install Git.Git`、`winget install GitHub.cli`、`winget install OpenJS.NodeJS.LTS`、`winget install Python.Python.3.12`（Mac 用 brew）。
+2. 請他在**自己的 PowerShell 視窗**跑（路徑換成本技能資料夾的實際位置）：
 
-## 1. 準備工具和帳號
-
-先檢查（用 Bash 執行，沒有的話給安裝方式，請他自己裝好再說）：
-
-```bash
-gh --version        # 沒有：winget install GitHub.cli（Mac：brew install gh）
-node --version      # 沒有：winget install OpenJS.NodeJS.LTS（Mac：brew install node）
-python --version    # 沒有：winget install Python.Python.3.12，或 python.org 下載，勾「Add python.exe to PATH」
-```
-
-再用 AskUserQuestion 一次問完：
-
-- gms 帳號（學號，不含 `@gms.ndhu.edu.tw`）。
-- 系所：用來把系辦、系上老師的信分成一組，例如「資工系」。
-- 要不要同步學校信箱：需要 Google 兩步驟驗證和應用程式密碼。
-- 要不要電腦端功能（講義下載和全文檢索、Claude 寫信件摘要）：只有 Windows，電腦要開著。
-
-然後請他在自己的終端機（PowerShell）各跑一次，會跳出瀏覽器讓他登入、按同意：
-
-```powershell
-gh auth login --web --git-protocol https
-npx firebase-tools login
-```
-
-GitHub 用哪個帳號都可以。Firebase 請用**個人 Google 帳號**，不要用 gms（學校的 Workspace 常常不能建 Firebase 專案）。跑完後用 `gh auth status`、`npx firebase-tools projects:list` 確認登入成功。
-
-## 2. 建 Firebase 專案
-
-工作資料夾用 `~/BetterElearning`（Windows：`%USERPROFILE%\BetterElearning`），之後的檔案都放這裡。專案 ID 用 `betterel-` 加 4–6 個隨機小寫英數字，例如 `betterel-k3x9`（全球唯一，被用掉就換一個）。
-
-```bash
-npx firebase-tools projects:create <專案ID> --display-name BetterElearning
-npx firebase-tools firestore:databases:create "(default)" --location asia-east1 --project <專案ID>
-npx firebase-tools apps:create web BetterElearning --project <專案ID>          # 記下輸出的 App ID
-npx firebase-tools apps:sdkconfig web <App ID> --project <專案ID> > ~/BetterElearning/firebase-config.txt
-```
-
-安全規則：把本技能資料夾 `cloud-template/firestore.rules` 複製到工作資料夾，旁邊放一個 `firebase.json`，內容 `{"firestore": {"rules": "firestore.rules"}}`，然後：
-
-```bash
-cd ~/BetterElearning && npx firebase-tools deploy --only firestore:rules --project <專案ID>
-```
-
-`projects:create` 失敗（第一次用的帳號要先同意條款）或 Firestore 建不起來的話，請使用者到 https://console.firebase.google.com 手動新增專案、建立 Firestore（位置選 `asia-east1`），再接著做上面其他指令。
-
-接下來兩件事 CLI 做不到，請使用者在瀏覽器點（把網址裡的專案 ID 換好再給他）：
-
-1. **開帳號**：`https://console.firebase.google.com/project/<專案ID>/authentication` → 開始使用 →「電子郵件/密碼」→ 啟用 → 儲存。再到「Users / 使用者」分頁 → 新增使用者，用他自己的 email 和**一組新密碼**（這是登入 app 用的，不是學校帳號）。建好後把那一列的「使用者 UID」貼給你（UID 不是秘密）。也順便問他用的 email，產生 QR code 時會預填。
-2. **下載金鑰**：`https://console.firebase.google.com/project/<專案ID>/settings/serviceaccounts/adminsdk` →「產生新的私密金鑰」→ 存成 `~/BetterElearning/firebase-sa.json`。跟他說：這個檔等於整個資料庫的鑰匙，不要傳給任何人。
-
-## 3. 建同步引擎（GitHub repo）
-
-把本技能資料夾的 `cloud-template/` 整個複製到 `~/BetterElearning/betterel-sync/`（包括 `.github` 和 `.gitignore`）。這個 repo 只放設定：`sync.yml` 會去呼叫外掛 repo 裡的同步程式（`@v1`），程式更新時使用者不用做任何事。然後：
-
-```bash
-cd ~/BetterElearning/betterel-sync
-git init -b main && git add -A && git commit -m "BetterElearning 同步引擎"
-gh repo create betterel-sync --private --source . --push
-R=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-gh secret set MOODLE_USERNAME --repo "$R" --body "<學號>"
-gh secret set FIREBASE_SA --repo "$R" < ~/BetterElearning/firebase-sa.json
-gh variable set FIREBASE_UID --repo "$R" --body "<UID>"
-gh variable set DEPT_LABEL --repo "$R" --body "<系所簡稱>"
-gh variable set DEPT_PATTERN --repo "$R" --body "<比對系上寄件者的正規表示式>"
-```
-
-`DEPT_PATTERN` 例如資工系 `資工|資訊工程|CSIE|系辦`、電機系 `電機|EE|系辦`。repo 一定要是 private。
-
-**密碼請使用者自己設**（在他的 PowerShell 跑，會提示輸入、畫面不顯示，把 `<R>` 換成上面的 repo 名稱再給他）：
-
-```powershell
-gh secret set MOODLE_PASSWORD --repo <R>
-```
-
-**信箱（有選才做）**：
-
-1. 用 gms 帳號登入 Google → myaccount.google.com →「安全性」→ 開啟「兩步驟驗證」。
-2. myaccount.google.com/apppasswords → 名稱 `betterel` → 產生 16 碼應用程式密碼。
-3. 在 PowerShell 跑 `gh secret set MAIL_APP_PASSWORD --repo <R>`，貼上那 16 碼。
-
-沒設 `MAIL_APP_PASSWORD` 的話會自動略過信箱。
-
-**第一次同步**：
-
-```bash
-gh workflow run probe.yml --repo "$R"     # 先測 GitHub 的機器連不連得到學校
-gh workflow run sync.yml --repo "$R"
-gh run watch --repo "$R" "$(gh run list --repo "$R" --workflow sync.yml --limit 1 --json databaseId -q '.[0].databaseId')"
-gh run view --repo "$R" --log | grep -E "登入成功|同步完成|完成 —|RESULT|written|Error|失敗"
-```
-
-看到「登入成功」和 `"data": "written ..."` 就成功了。登入失敗多半是學號或密碼打錯，請他重跑 `gh secret set MOODLE_PASSWORD`；信箱失敗看到 `Application-specific password required`，代表存成了一般密碼，要用應用程式密碼重設。
-
-之後它會每小時第 17 分自動跑。
-
-## 4. 連上 app
-
-```bash
-python -m pip install -q qrcode
-python <本技能資料夾>/files/setup_link.py ~/BetterElearning/firebase-config.txt --email "<他的 email>" --qr ~/BetterElearning/setup-qr.svg > ~/BetterElearning/setup-link.txt
-```
-
-用系統預設程式打開 `setup-qr.svg` 給他掃（Windows：`start "" "%USERPROFILE%\BetterElearning\setup-qr.svg"`）。連結和 QR code 只有 Firebase 的網頁設定（不是秘密）和 email，可以放心給他本人，但不要貼到公開的地方。
-
-- **手機（Android）**：到 https://github.com/gtoki3177/BetterNDHUelearning/releases 下載最新的 `BetterElearning.apk` 安裝（要允許安裝不明來源的 app；Play 保護機制警告選「仍要安裝」）。裝好後用相機掃 QR code，會直接用 app 打開、停在登入畫面，輸入第 2 步建的 Firebase 帳號密碼。iPhone 目前沒有 app，用下面的網頁版。
-- **電腦 / iPhone**：用 Chrome 或 Edge 打開 `setup-link.txt` 裡的連結，登入後網址列右邊有「安裝應用程式」，裝了就是獨立視窗。
-
-**立即同步（選用）**：app 右上角選單的「立即同步」需要一組只能觸發這個 repo 的 GitHub token。請他到 GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token：Repository access 只選 `betterel-sync`，Permissions 把 **Actions** 設成 Read and write，到期日最長一年。產生後在 app 的「設定」頁填 repo（`<R>`）和 token。手機設好電腦也能用（存在他自己的資料庫裡）。
-
-## 5. 電腦端功能（有選才做，Windows）
-
-### 講義下載和全文檢索
-
-照 `LITE.md` 的第 1 步問根資料夾、第 2 步把 `files/` 放進 `<根資料夾>\_moodle\`、第 3 步只做 `setup.ps1`、`set_password.py`、`moodle_sync.py --force`（**不要**做信箱那段、不要做 `LITE.md` 第 4b、5、6 步）。要點教材直接開檔的話，做 `LITE.md` 第 4 步。
-
-### Claude 寫信件摘要
-
-需要 Claude 桌面版開著（排程只在桌面版開著時跑，關著的話下次打開會補跑）。
-
-1. 把 `cloud-template/cloud/summaries.py` 和 `cloud-template/cloud/cloud_push.py` 複製到 `~/BetterElearning/cloud/`。
-2. `python -m pip install -q firebase-admin`
-3. 在 `~/BetterElearning/config.ini` 寫：
-
-   ```ini
-   [cloud]
-   service_account = firebase-sa.json
-   uid = <UID>
+   ```powershell
+   python "<本技能資料夾>\files\install_full.py"
    ```
 
-4. 測一次：`python ~/BetterElearning/cloud/summaries.py need --config ~/BetterElearning/config.ini`，應該印出 `count`。
-5. 用 `create_scheduled_task` 建本機排程：`taskId` `betterel-mail-summaries`，標題「BetterElearning 信件摘要」，`cronExpression` `15 8-22/2 * * *`，`notifyOnCompletion` false，`prompt` 用下面這段（把三個路徑換成這台電腦的實際路徑）：
+   腳本會自己問學號、系所、要不要同步信箱，帶他登入 GitHub / Firebase、建專案、建私有 repo、讓他自己輸入密碼、跑第一次同步，最後打開他專屬的 QR code。中途要去 Firebase 網頁點兩個地方（開帳號、下載金鑰），腳本會印出網址等他。進度存在 `~/BetterElearning/install-state.json`，中斷了重跑就會接著做。
+
+3. 你只在他貼錯誤訊息過來時幫忙。常見狀況：
+   - **Firebase 自動建專案失敗**：第一次用 Firebase 的帳號要先在 https://console.firebase.google.com 建一個專案（同意條款），腳本會問專案 ID。
+   - **e學苑登入失敗**：學號或密碼錯。刪掉 `install-state.json` 裡的 `"pw_moodle"` 再跑。
+   - **信箱 `Application-specific password required`**：存成一般密碼了，要用 16 碼應用程式密碼。刪掉 `"pw_mail"` 再跑。學校如果鎖了應用程式密碼，就重跑時選不同步信箱。
+   - **同步失敗看不懂**：用 `gh run view --repo <他的帳號>/betterel-sync --log-failed` 看錯誤。
+
+4. 收尾：手機到 https://github.com/gtoki3177/BetterNDHUelearning/releases/latest 下載 `BetterElearning.apk` 安裝，再掃 QR code；電腦用 Chrome / Edge 開 `~/BetterElearning/setup-link.txt` 裡的連結，網址列可以「安裝應用程式」。登入用他在 Firebase 建的 email 和密碼（不是學校帳號）。
+
+## 2. 選用設定（使用者說「BetterElearning 的選用設定」時也從這裡開始）
+
+用 AskUserQuestion 問要哪幾項（可複選），只做他選的：
+
+### 立即同步按鈕
+
+app 選單裡的「立即同步」需要一組只能觸發他同步 repo 的 GitHub token。請他自己做（token 不要貼給你）：GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token；Repository access 只選 `betterel-sync`；Permissions 把 **Actions** 設成 Read and write；到期日最長一年。產生後在 app 的「設定」頁填 repo（`<他的帳號>/betterel-sync`）和 token。手機設好電腦也能用。
+
+### Claude 寫信件摘要（需要 Claude 桌面版開著）
+
+**會花 Claude 額度**：每跑一次大約是一段短對話，沒有新信時很快結束。Pro 方案建議一天一次（傍晚），額度多再改成每兩小時。
+
+1. 把本技能資料夾 `cloud-template/cloud/summaries.py` 和 `cloud_push.py` 複製到 `~/BetterElearning/cloud/`。
+2. `python -m pip install -q firebase-admin`
+3. 寫 `~/BetterElearning/config.ini`：`[cloud]`、`service_account = firebase-sa.json`、`uid = <UID>`（UID 在 `~/BetterElearning/install-state.json` 的 `"uid"`）。
+4. 測：`python ~/BetterElearning/cloud/summaries.py need --config ~/BetterElearning/config.ini`，要印出 `count`。
+5. 用 `create_scheduled_task` 建本機排程：`taskId` `betterel-mail-summaries`，標題「BetterElearning 信件摘要」，`cronExpression` Pro 方案用 `15 18 * * *`（每天 18:15），額度多用 `15 8-22/2 * * *`，`notifyOnCompletion` false，`prompt` 用下面這段（三個路徑換成實際路徑）：
 
 ```text
 替 BetterElearning app 寫信件摘要。這是自動排程，沒人在旁邊，不要問問題，做完就結束。不要碰 firebase-sa.json 的內容。
@@ -193,20 +91,14 @@ count 是 0 → 回覆「沒有新信要寫摘要」結束。指令失敗 → �
 最後回覆一句話，例如「替 3 封新信寫好摘要：獎學金申請（10/20 截止）、…」。
 ```
 
-建好後用 `run_scheduled_task` 跑一次，請他在桌面版核准排程要用的工具（之後就會自動跑）。
+建好後用 `run_scheduled_task` 跑一次，請他在桌面版核准排程要用的工具，之後就會自動跑。
 
-## 6. 收尾
+### 講義下載和全文檢索（Windows，電腦要開著）
 
-用幾句話告訴使用者：
-
-- 手機 app 和網頁版的連結；`setup-link.txt` 和 `setup-qr.svg` 留在 `~/BetterElearning`，換手機或換電腦時再掃一次就好。
-- 每小時第 17 分會自動同步一次，不用開電腦。急的話用 app 選單裡的「立即同步」（有設 token 才有）。
-- 沒網路時 app 照樣打得開，顯示上次的資料；釘選、打勾、備忘會在連上後同步到他的其他裝置。
-- `~/BetterElearning/firebase-sa.json` 不要傳給任何人。學校密碼改了要重跑 `gh secret set MOODLE_PASSWORD`。
+照 `LITE.md` 的第 1 步問根資料夾、第 2 步把 `files/` 放進 `<根資料夾>\_moodle\`、第 3 步只做 `setup.ps1`、`set_password.py`、`moodle_sync.py --force`（**不要**做信箱那段、不要做 `LITE.md` 第 4b、5、6 步）。要點教材直接開檔的話做 `LITE.md` 第 4 步。之後問 Claude「哪堂課講過 deadlock」就會用 search-materials 技能查。
 
 ## 升級
 
-- **同步引擎**：自動。使用者的 `sync.yml` 引用外掛 repo 的 `engine-sync.yml@v1`，維護者把 `v1` 標籤移到新版後，下一個整點就生效。
-  0.5.0 安裝的舊版 repo（`cloud/` 裡有 `moodle_sync.py`）要升級一次：把 `cloud-template/.github/workflows/sync.yml` 蓋過去、刪掉 `cloud/moodle_sync.py`、`cloud/mail_sync.py`、`cloud/config.cloud.ini`、`cloud/requirements.txt`，commit、push，然後 `gh workflow run sync.yml` 確認成功。
-- **app**：畫面會自己熱更新（打開 app 時背景下載、退到背景時換上）。只有需要新原生功能時，app 選單會出現「有新版 app」，到 Releases 下載覆蓋安裝，資料和登入都會保留。
-- **網頁版**：共用的 `betterel.web.app`，維護者部署後重新整理就是新版。
+- **同步引擎**：自動。他的 `sync.yml` 引用外掛 repo 的 `engine-sync.yml@v1`，維護者把 `v1` 標籤移到新版後，下一個整點就生效。0.5.0 裝的舊 repo（`cloud/` 裡有 `moodle_sync.py`）要升級一次：把 `cloud-template/.github/workflows/sync.yml` 蓋過去、刪掉 `cloud/moodle_sync.py`、`cloud/mail_sync.py`、`cloud/config.cloud.ini`、`cloud/requirements.txt`，commit、push，再 `gh workflow run sync.yml` 確認。
+- **app**：畫面自己熱更新。選單出現「有新版 app」時，到 Releases 下載覆蓋安裝，資料和登入都會保留。
+- **網頁版**：共用的 `betterel.web.app`，重新整理就是新版。

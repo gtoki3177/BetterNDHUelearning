@@ -12,7 +12,31 @@
 | 需要 | GitHub、個人 Google 帳號（都免費）；任何作業系統 | Windows、Claude 付費方案 |
 | 選用 | 電腦開著時：講義下載和全文檢索、Claude 寫信件摘要 | — |
 
-兩種都是在 Claude 桌面版裡跟 Claude 說「幫我設定 BetterNDHUelearning」，它會先問你要哪一種，再一步步帶你做。安裝外掛的方式見下面的〈安裝〉。
+兩種都可以在 Claude 桌面版裡跟 Claude 說「幫我設定 BetterNDHUelearning」，它會先問你要哪一種，再帶你做。安裝外掛的方式見下面的〈安裝〉。
+
+### 完整安裝不用 Claude 也能裝（Pro 方案額度少的話推薦）
+
+安裝是一支腳本，自己在終端機跑就好，Claude 只在你卡住時才需要：
+
+1. 裝工具（PowerShell，一行一行貼；Mac 用 brew），裝完把視窗關掉重開：
+
+   ```powershell
+   winget install Git.Git
+   winget install GitHub.cli
+   winget install OpenJS.NodeJS.LTS
+   winget install Python.Python.3.12
+   ```
+
+2. 這個頁面右上角綠色的 **Code → Download ZIP**，解壓縮。
+3. 在 PowerShell 跑（路徑換成你解壓縮的位置）：
+
+   ```powershell
+   python "$HOME\Downloads\BetterNDHUelearning-main\pluginsetter-ndhu-elearning\skills\setupiles\install_full.py"
+   ```
+
+   照畫面一步步做，大約 15 分鐘。中斷了再跑一次會接著做。
+
+裝完之後，想要 app 的「立即同步」按鈕、讓 Claude 替重要的信寫摘要（會花 Claude 額度，預設一天一次）、或下載講義到電腦，再跟 Claude 說「BetterElearning 的選用設定」。
 
 Android app 在 [Releases](https://github.com/gtoki3177/BetterNDHUelearning/releases) 下載，之後畫面會自己熱更新。完整安裝的雲端同步程式在 [`engine/`](engine/)，大家的私有 repo 都引用它的 `v1` 版，修好爬蟲推上來、移動 `v1` 標籤，所有人下一個整點就更新。app 是大家共用的，設定時 Claude 會給你一個專屬 QR code，掃了才會連到你自己的資料；你的資料放在你自己的 Firebase，別人（包括這個 repo 的作者）看不到。
 

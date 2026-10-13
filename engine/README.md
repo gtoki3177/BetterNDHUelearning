@@ -14,8 +14,9 @@
 - 使用者的 repo 引用 `@v1`。改這裡的程式推到 `main` 之後，引用 `@main` 的人（開發者自己）下一個整點就會跑到新版。
 - 確認沒問題再把 `v1` 標籤移過去，所有人下一個整點就會更新：
 
-  ```bash
-  git tag -f v1 && git push -f origin v1
+  ```powershell
+  git tag -f v1
+  git push -f origin v1
   ```
 
 - 不相容的改動（例如需要新的 Secret）請開 `v2`，並在 setup 技能裡寫清楚怎麼升級。
