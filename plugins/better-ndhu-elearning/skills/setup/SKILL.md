@@ -86,7 +86,7 @@ cd ~/BetterElearning && npx firebase-tools deploy --only firestore:rules --proje
 
 ## 3. 建同步引擎（GitHub repo）
 
-把本技能資料夾的 `cloud-template/` 整個複製到 `~/BetterElearning/betterel-sync/`（包括 `.github` 和 `.gitignore`），然後：
+把本技能資料夾的 `cloud-template/` 整個複製到 `~/BetterElearning/betterel-sync/`（包括 `.github` 和 `.gitignore`）。這個 repo 只放設定：`sync.yml` 會去呼叫外掛 repo 裡的同步程式（`@v1`），程式更新時使用者不用做任何事。然後：
 
 ```bash
 cd ~/BetterElearning/betterel-sync
@@ -114,7 +114,7 @@ gh secret set MOODLE_PASSWORD --repo <R>
 2. myaccount.google.com/apppasswords → 名稱 `betterel` → 產生 16 碼應用程式密碼。
 3. 在 PowerShell 跑 `gh secret set MAIL_APP_PASSWORD --repo <R>`，貼上那 16 碼。
 
-沒選信箱的話，把 `.github/workflows/sync.yml` 裡「Mail sync」那一步整段刪掉再 commit / push。
+沒設 `MAIL_APP_PASSWORD` 的話會自動略過信箱。
 
 **第一次同步**：
 
@@ -206,5 +206,7 @@ count 是 0 → 回覆「沒有新信要寫摘要」結束。指令失敗 → �
 
 ## 升級
 
-- **同步引擎**：把新版 `cloud-template/` 的檔案蓋到他的 `betterel-sync` repo（`.github/workflows/`、`cloud/*.py`、`cloud/requirements.txt`、`cloud/config.cloud.ini`、`firestore.rules`），commit、push。不要動 Secrets。
-- **app**：到 Releases 下載新版 APK 直接覆蓋安裝，資料和登入都會保留。網頁版會自己更新。
+- **同步引擎**：自動。使用者的 `sync.yml` 引用外掛 repo 的 `engine-sync.yml@v1`，維護者把 `v1` 標籤移到新版後，下一個整點就生效。
+  0.5.0 安裝的舊版 repo（`cloud/` 裡有 `moodle_sync.py`）要升級一次：把 `cloud-template/.github/workflows/sync.yml` 蓋過去、刪掉 `cloud/moodle_sync.py`、`cloud/mail_sync.py`、`cloud/config.cloud.ini`、`cloud/requirements.txt`，commit、push，然後 `gh workflow run sync.yml` 確認成功。
+- **app**：畫面會自己熱更新（打開 app 時背景下載、退到背景時換上）。只有需要新原生功能時，app 選單會出現「有新版 app」，到 Releases 下載覆蓋安裝，資料和登入都會保留。
+- **網頁版**：共用的 `betterel.web.app`，維護者部署後重新整理就是新版。

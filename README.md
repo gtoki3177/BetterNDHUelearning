@@ -14,7 +14,7 @@
 
 兩種都是在 Claude 桌面版裡跟 Claude 說「幫我設定 BetterNDHUelearning」，它會先問你要哪一種，再一步步帶你做。安裝外掛的方式見下面的〈安裝〉。
 
-Android app 在 [Releases](https://github.com/gtoki3177/BetterNDHUelearning/releases) 下載。app 是大家共用的，設定時 Claude 會給你一個專屬 QR code，掃了才會連到你自己的資料；你的資料放在你自己的 Firebase，別人（包括這個 repo 的作者）看不到。
+Android app 在 [Releases](https://github.com/gtoki3177/BetterNDHUelearning/releases) 下載，之後畫面會自己熱更新。完整安裝的雲端同步程式在 [`engine/`](engine/)，大家的私有 repo 都引用它的 `v1` 版，修好爬蟲推上來、移動 `v1` 標籤，所有人下一個整點就更新。app 是大家共用的，設定時 Claude 會給你一個專屬 QR code，掃了才會連到你自己的資料；你的資料放在你自己的 Firebase，別人（包括這個 repo 的作者）看不到。
 
 ---
 

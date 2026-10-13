@@ -1,0 +1,103 @@
+name: BetterElearning engine
+
+# 給每個使用者自己的私有 repo 呼叫 (reusable workflow)：
+#   jobs:
+#     sync:
+#       uses: gtoki3177/BetterNDHUelearning/.github/workflows/engine-sync.yml@v1
+#       with: { firebase_uid: ${{ vars.FIREBASE_UID }}, dept_label: ..., dept_pattern: ... }
+#       secrets: inherit        # MOODLE_USERNAME / MOODLE_PASSWORD / MAIL_APP_PASSWORD (選用) / FIREBASE_SA
+# 程式碼一律用這個 workflow 被呼叫時的那個版本 (@v1 就是 v1 標籤指到的 engine/)。
+on:
+  workflow_call:
+    inputs:
+      firebase_uid:
+        type: string
+        required: true
+      dept_label:
+        type: string
+        default: "系上"
+      dept_pattern:
+        type: string
+        default: "系辦"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: betterel-sync-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      TZ: Asia/Taipei
+    steps:
+      - name: Get engine
+        uses: actions/checkout@v4
+        with:
+          repository: gtoki3177/BetterNDHUelearning
+          ref: ${{ github.job_workflow_sha || 'v1' }}
+          sparse-checkout: engine
+          path: src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: src/engine/requirements.txt
+
+      - name: Install deps
+        run: pip install -q -r src/engine/requirements.txt
+
+      - name: Write config.ini
+        working-directory: src/engine
+        env:
+          MOODLE_USERNAME: ${{ secrets.MOODLE_USERNAME }}
+          DEPT_LABEL: ${{ inputs.dept_label }}
+          DEPT_PATTERN: ${{ inputs.dept_pattern }}
+        run: |
+          if [ -z "$MOODLE_USERNAME" ]; then echo "secret MOODLE_USERNAME 沒設"; exit 1; fi
+          python3 - <<'PY'
+          import os
+          s = open("config.cloud.ini", encoding="utf-8").read()
+          for k in ("USERNAME", "DEPT_LABEL", "DEPT_PATTERN"):
+              s = s.replace(f"__{k}__", os.environ["MOODLE_USERNAME" if k == "USERNAME" else k])
+          open("config.ini", "w", encoding="utf-8").write(s)
+          PY
+          mkdir -p /tmp/betterel_root
+
+      - name: Pull previous state from Firestore
+        working-directory: src/engine
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          FIREBASE_UID: ${{ inputs.firebase_uid }}
+        run: python cloud_push.py pull --dir .
+
+      - name: Moodle light sync
+        working-directory: src/engine
+        env:
+          MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
+          MOODLE_COOKIE_FILE: moodle_cookies.json
+        run: python moodle_sync.py --light
+
+      - name: Mail sync
+        if: always()
+        working-directory: src/engine
+        env:
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+        run: |
+          if [ -z "$MAIL_APP_PASSWORD" ]; then echo "沒設 MAIL_APP_PASSWORD，略過信箱"; exit 0; fi
+          python mail_sync.py
+
+      - name: Push to Firestore
+        if: always()
+        working-directory: src/engine
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          FIREBASE_UID: ${{ inputs.firebase_uid }}
+        run: python cloud_push.py push --dir . --source actions
+
+      - name: Status
+        if: always()
+        working-directory: src/engine
+        run: |
+          python3 -c "import json,os;[print(k, {x: json.load(open(f'status_{k}.json', encoding='utf-8')).get(x) for x in ('ok','finished_at','changed')}) for k in ('moodle','mail') if os.path.exists(f'status_{k}.json')]" || true
+          tail -n 3 log.txt mail_log.txt 2>/dev/null || true
