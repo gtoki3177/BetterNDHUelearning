@@ -97,6 +97,20 @@ count 是 0 → 回覆「沒有新信要寫摘要」結束。指令失敗 → �
 
 照 `LITE.md` 的第 1 步問根資料夾、第 2 步把 `files/` 放進 `<根資料夾>\_moodle\`、第 3 步只做 `setup.ps1`、`set_password.py`、`moodle_sync.py --force`（**不要**做信箱那段、不要做 `LITE.md` 第 4b、5、6 步）。要點教材直接開檔的話做 `LITE.md` 第 4 步。之後問 Claude「哪堂課講過 deadlock」就會用 search-materials 技能查。
 
+接著讓 app 知道講義在電腦的哪裡（電腦版點教材就會直接開檔、教材分頁會顯示索引統計）：
+
+1. 把本技能資料夾的 `cloud-template/cloud/cloud_push.py` 複製到 `<根資料夾>\_moodle\`，並 `python -m pip install -q firebase-admin`。
+2. 在 `_moodle\config.ini` 加 `[cloud]` 段：`service_account = <firebase-sa.json 的完整路徑>`、`uid = <UID>`（在 `~/BetterElearning/install-state.json`）。
+3. 試跑：`python <_moodle>\cloud_push.py overlay --dir <_moodle> --config <_moodle>\config.ini`，要印出 `"overlay": "updated"`。
+4. 在「NDHU Moodle Sync」排程加第二個動作，同步完就補資料（PowerShell）：
+
+   ```powershell
+   $t = Get-ScheduledTask -TaskName 'NDHU Moodle Sync'
+   $d = '<_moodle 的完整路徑>'
+   $a = New-ScheduledTaskAction -Execute $t.Actions[0].Execute -Argument "`"$d\cloud_push.py`" overlay --dir `"$d`" --config `"$d\config.ini`"" -WorkingDirectory $d
+   Set-ScheduledTask -TaskName 'NDHU Moodle Sync' -Action @($t.Actions[0], $a)
+   ```
+
 ## 升級
 
 - **同步引擎**：自動。他的 `sync.yml` 引用外掛 repo 的 `engine-sync.yml@v1`，維護者把 `v1` 標籤移到新版後，下一個整點就生效。0.5.0 裝的舊 repo（`cloud/` 裡有 `moodle_sync.py`）要升級一次：把 `cloud-template/.github/workflows/sync.yml` 蓋過去、刪掉 `cloud/moodle_sync.py`、`cloud/mail_sync.py`、`cloud/config.cloud.ini`、`cloud/requirements.txt`，commit、push，再 `gh workflow run sync.yml` 確認。

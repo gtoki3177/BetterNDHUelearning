@@ -2,6 +2,8 @@
 
     python cloud_push.py pull --dir .                  # 同步前: 從 Firestore 取回上一次的原始檔和 e學苑 session
     python cloud_push.py push --dir . --source actions # 同步後: 組成儀表板文件寫進 Firestore
+    python cloud_push.py overlay --dir <_moodle> --config <_moodle>/config.ini
+                                                       # 電腦端: 把教材本機路徑、全文索引統計補進 Firestore
 
 Firestore 結構 (都在 users/{uid}/ 底下):
     dash/data      儀表板的 e學苑資料 (格式同 artifact 頁面資料庫的 dashboard/data)
@@ -254,6 +256,64 @@ def cmd_pull(user, d):
         print("pull session: ok")
 
 
+def cmd_overlay(user, d, cfg_path):
+    """電腦端 (每次 moodle_sync.py 跑完)：把教材在這台電腦的路徑、全文索引統計、根資料夾補進 dash/data。
+    只改 courses 裡教材的 local、root、index 三樣，作業和課程本身維持雲端同步寫的；
+    雲端同步之後重組資料時會從上一版沿用這三樣，所以電腦關機也不會被洗掉。"""
+    dash = user.collection("dash")
+    L = read_json(d / "latest.json")
+    if not L:
+        print(json.dumps({"overlay": "skip (沒有 latest.json)"}))
+        return
+    ref = dash.document("data")
+    doc = get(ref)
+    if not doc:
+        print(json.dumps({"overlay": "skip (Firestore 還沒有資料，雲端同步還沒跑過)"}))
+        return
+    local = {a["url"]: a["local"] for c in L.get("courses", []) for a in c.get("activities", [])
+             if a.get("local") and a.get("url")}
+    cp = configparser.ConfigParser()
+    if cfg_path and Path(cfg_path).exists():
+        cp.read(cfg_path, encoding="utf-8-sig")
+    root = (cp.get("moodle", "root_folder", fallback="") or "").strip() or str(Path(d).resolve().parent)
+    st = L.get("stats") or {}
+    index = ({"files": st.get("indexed_files", 0), "chunks": st.get("indexed_chunks", 0), "courses": st.get("index") or []}
+             if st.get("index") is not None else doc.get("index"))
+    courses = doc.get("courses", [])
+    changed = 0
+    for c in courses:
+        for it in c.get("items", []):
+            lp = local.get(it.get("url"))
+            if lp and it.get("local") != lp:
+                it["local"] = lp
+                changed += 1
+    patch = {}
+    if changed:
+        patch["courses"] = courses
+    if doc.get("root") != root:
+        patch["root"] = root
+    if index is not None and doc.get("index") != index:
+        patch["index"] = index
+    if patch:
+        ref.update(patch)
+    status = read_json(d / "status_moodle.json")
+    dash.document("settings").set({"engines": {"pc": {"at": now_iso(), **({"moodle": status} if status else {})}}}, merge=True)
+    print(json.dumps({"overlay": "updated" if patch else "unchanged", "fields": sorted(patch), "local_paths": changed}, ensure_ascii=False))
+
+
+def use_config(cfg_path):
+    """電腦端用 config.ini 的 [cloud] (service_account 相對於 config.ini、uid) 取代環境變數。"""
+    cp = configparser.ConfigParser()
+    cp.read(cfg_path, encoding="utf-8-sig")
+    if not cp.has_section("cloud"):
+        sys.exit(f"{cfg_path} 沒有 [cloud] 段落 (service_account、uid)")
+    sa = Path(cp.get("cloud", "service_account"))
+    if not sa.is_absolute():
+        sa = Path(cfg_path).resolve().parent / sa
+    os.environ.setdefault("FIREBASE_SA_FILE", str(sa))
+    os.environ.setdefault("FIREBASE_UID", cp.get("cloud", "uid").strip())
+
+
 def cmd_push(user, d, source, save_state):
     dash, engine = user.collection("dash"), user.collection("engine")
     L, M = read_json(d / "latest.json"), read_json(d / "mail.json")
@@ -310,11 +370,24 @@ def main():
     except Exception:
         pass
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["pull", "push"])
+    ap.add_argument("cmd", choices=["pull", "push", "overlay"])
     ap.add_argument("--dir", default=".")
     ap.add_argument("--source", default="actions", help="actions / pc：寫進 settings.engines 的名字")
     ap.add_argument("--no-state", action="store_true", help="push 時不寫回原始檔和 session (電腦端用)")
+    ap.add_argument("--config", help="電腦端: config.ini (讀 [cloud] 的金鑰和 uid、[moodle] 的 root_folder)")
     a = ap.parse_args()
+    if a.config:
+        use_config(a.config)
+    d = Path(a.dir)
+    if a.cmd == "overlay":
+        # 電腦的排程用 pythonw 跑，沒有視窗：出錯寫進 cloud_push_log.txt
+        try:
+            cmd_overlay(connect(), d, a.config)
+        except BaseException as e:  # noqa: BLE001
+            with open(d / "cloud_push_log.txt", "a", encoding="utf-8") as f:
+                f.write(f"{now_iso()} overlay 失敗: {e!r}\n")
+            raise
+        return
     user = connect()
     d = Path(a.dir)
     if a.cmd == "pull":
