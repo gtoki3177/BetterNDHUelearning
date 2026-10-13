@@ -31,7 +31,7 @@
 3. 在 PowerShell 跑（路徑換成你解壓縮的位置）：
 
    ```powershell
-   python "$HOME\Downloads\BetterNDHUelearning-main\pluginsetter-ndhu-elearning\skills\setupiles\install_full.py"
+   python "$HOME\Downloads\BetterNDHUelearning-main\plugins\better-ndhu-elearning\skills\setup\files\install_full.py"
    ```
 
    照畫面一步步做，大約 15 分鐘。中斷了再跑一次會接著做。
