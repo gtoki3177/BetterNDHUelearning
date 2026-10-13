@@ -3,11 +3,12 @@
     python install_full.py
 
 會做的事：檢查工具 → 登入 GitHub / Firebase → 建你自己的 Firebase 專案 → 建你自己的私有同步 repo、
-設好帳密 → 跑第一次同步 → 產生 app 的專屬 QR code。中途關掉沒關係，再跑一次會從上次停下的地方接著做
+設好帳密 → 跑第一次同步 → 產生 app 的專屬 QR code → (Windows) 把講義下載到這台電腦、之後每天自動下載。中途關掉沒關係，再跑一次會從上次停下的地方接著做
 （進度記在 ~/BetterElearning/install-state.json）。
 
 需要：git、GitHub CLI (gh)、Node.js、Python 3.9+。密碼只會在這個視窗裡輸入，直接交給 GitHub 加密保存。
 """
+import configparser
 import json
 import os
 import random
@@ -340,6 +341,92 @@ def link_app(st):
         webbrowser.open((WORK / "setup-qr.svg").as_uri())
 
 
+PC_FILES = ["moodle_sync.py", "search.py", "set_password.py", "setup.ps1", "install_task.ps1", "check_task.ps1",
+            "open_local.ps1", "open_local.vbs", "install_open_local.ps1", "config.example.ini", "README.md"]
+
+
+def ps(script, cwd):
+    """跑 PowerShell 腳本 (畫面直接顯示)。"""
+    return subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)], cwd=str(cwd)).returncode
+
+
+def pc_materials(st):
+    step(9, "把講義下載到這台電腦")
+    if os.name != "nt":
+        say("  這一步只支援 Windows（用到 Windows 的密碼加密和工作排程），略過。")
+        return
+    if st.get("pc_root") and Path(st["pc_root"], "_moodle", "cred.dat").exists() and st.get("pc_done"):
+        say(f"  已經裝好了：{st['pc_root']}")
+        return
+    if st.get("pc_skip") and not yes("  上次選了不下載。現在要下載嗎？", False):
+        return
+    say("  每門課的講義會下載到你選的資料夾、建全文索引，之後每天自動下載新的；")
+    say("  電腦版 app 點教材就會直接打開檔案，也可以問 Claude「哪堂課講過 deadlock」。")
+    say("  第一次下載視講義多寡要幾分鐘，檔案可能不小。電腦要開著才會每天下載。")
+    if not yes("  要下載嗎？"):
+        st["pc_skip"] = True
+        save_state(st)
+        return
+    st.pop("pc_skip", None)
+    p = st["profile"]
+    root = Path(st.get("pc_root") or ask("  課程資料夾放哪裡（每門課會是一個子資料夾）", str(Path.home() / "Documents" / "NDHU")))
+    md = root / "_moodle"
+    md.mkdir(parents=True, exist_ok=True)
+    st["pc_root"] = str(root)
+    save_state(st)
+
+    # 1. 程式 (位元組原樣複製: .ps1 要保留 UTF-8 BOM)
+    for name in PC_FILES:
+        if (HERE / name).exists():
+            shutil.copyfile(HERE / name, md / name)
+    shutil.copyfile(TEMPLATE / "cloud" / "cloud_push.py", md / "cloud_push.py")
+    if not (md / "firebase-sa.json").exists():
+        shutil.copyfile(WORK / "firebase-sa.json", md / "firebase-sa.json")
+
+    # 2. config.ini (已經有就不動，只補 [cloud])
+    cfgp = md / "config.ini"
+    if not cfgp.exists():
+        t = (HERE / "config.example.ini").read_text(encoding="utf-8-sig")
+        # 替換內容用 lambda 給：Windows 路徑的反斜線放在替換字串裡會被當成跳脫字元
+        for key, val in (("username", p["student"]), ("root_folder", str(root)),
+                         ("dept_label", p["dept_label"]), ("dept_pattern", p["dept_pattern"])):
+            t = re.sub(rf"(?m)^{key} =.*$", lambda m, k=key, v=val: f"{k} = {v}", t, count=1)
+        cfgp.write_text(t, encoding="utf-8")
+    cp = configparser.ConfigParser()
+    cp.read(cfgp, encoding="utf-8-sig")
+    if not cp.has_section("cloud"):
+        with open(cfgp, "a", encoding="utf-8") as f:
+            f.write(f"\n[cloud]\n# BetterElearning app：Firebase 金鑰 (相對於這個檔) 和登入帳號的 UID\nservice_account = firebase-sa.json\nuid = {st['uid']}\n")
+
+    # 3. 密碼 (存在這台電腦，用 Windows 加密；跟 GitHub 上那份分開)
+    if not (md / "cred.dat").exists():
+        say("\n  電腦每天下載講義要用 e學苑密碼，只會加密存在這台電腦。輸入時畫面不會顯示。")
+        subprocess.run([sys.executable, str(md / "set_password.py")], cwd=str(md))
+        if not (md / "cred.dat").exists():
+            raise RuntimeError("密碼沒有存成功，再跑一次這支腳本會從這裡接著做。")
+
+    # 4. 套件 + 每天下載的排程 (setup.ps1 會叫 install_task.ps1，順便把補資料的動作加進排程)
+    say("\n  安裝套件、註冊每天下載的排程…")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "firebase-admin"], check=False)
+    ps(md / "setup.ps1", md)
+
+    # 5. 第一次完整下載 + 把教材路徑補進 app
+    say("\n  第一次下載講義（會花幾分鐘）…")
+    r = subprocess.run([sys.executable, str(md / "moodle_sync.py"), "--force"], cwd=str(md))
+    if r.returncode != 0:
+        say(f"  下載有錯，看 {md / 'log.txt'} 最後幾行。排程之後還是會每天再試。")
+    subprocess.run([sys.executable, str(md / "cloud_push.py"), "overlay", "--dir", str(md), "--config", str(cfgp)], cwd=str(md))
+
+    # 6. 點教材直接開檔
+    say("\n  電腦版 app 點教材要直接開檔，需要在 Windows 登記一個 betterel: 連結。")
+    say("  它只開課程資料夾裡的文件（pdf、ppt、doc、xls、txt…），zip 和資料夾用檔案總管打開，其他檔案一律不執行。")
+    if yes("  要登記嗎？"):
+        ps(md / "install_open_local.ps1", md)
+    st["pc_done"] = True
+    save_state(st)
+    say(f"  講義在 {root}，每天第一次開機後會自動下載新的。")
+
+
 def main():
     say("BetterElearning 完整安裝")
     say(f"檔案會放在 {WORK}")
@@ -355,6 +442,7 @@ def main():
         if not st.get("synced") or yes("\n  要再跑一次同步測試嗎？", False):
             first_sync(st)
         link_app(st)
+        pc_materials(st)
     except KeyboardInterrupt:
         say("\n已中斷。再跑一次會從這裡接著做。")
         sys.exit(1)
@@ -365,6 +453,8 @@ def main():
     say("\n完成！")
     say(f"- {WORK} 裡的 firebase-sa.json 不要傳給任何人。學校密碼改了：gh secret set MOODLE_PASSWORD --repo {st['repo']}")
     say("- 想讓 app 有「立即同步」按鈕、或讓 Claude 替重要的信寫摘要：在 Claude 桌面版說「BetterElearning 的選用設定」。")
+    if st.get("pc_done"):
+        say(f"- 講義在 {st['pc_root']}。排程有沒有在跑：在那裡的 _moodle 資料夾執行 check_task.ps1。")
 
 
 if __name__ == "__main__":

@@ -36,13 +36,14 @@ description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網�
    python "<本技能資料夾>\files\install_full.py"
    ```
 
-   腳本會自己問學號、系所、要不要同步信箱，帶他登入 GitHub / Firebase、建專案、建私有 repo、讓他自己輸入密碼、跑第一次同步，最後打開他專屬的 QR code。中途要去 Firebase 網頁點兩個地方（開帳號、下載金鑰），腳本會印出網址等他。進度存在 `~/BetterElearning/install-state.json`，中斷了重跑就會接著做。
+   腳本會自己問學號、系所、要不要同步信箱，帶他登入 GitHub / Firebase、建專案、建私有 repo、讓他自己輸入密碼、跑第一次同步、打開他專屬的 QR code；Windows 的話最後會問要不要把講義下載到電腦（預設要：選資料夾、輸入一次 e學苑密碼存在這台電腦、註冊每天下載的排程、當場下載一次）。中途要去 Firebase 網頁點兩個地方（開帳號、下載金鑰），腳本會印出網址等他。進度存在 `~/BetterElearning/install-state.json`，中斷了重跑就會接著做。
 
 3. 你只在他貼錯誤訊息過來時幫忙。常見狀況：
    - **Firebase 自動建專案失敗**：第一次用 Firebase 的帳號要先在 https://console.firebase.google.com 建一個專案（同意條款），腳本會問專案 ID。
    - **e學苑登入失敗**：學號或密碼錯。刪掉 `install-state.json` 裡的 `"pw_moodle"` 再跑。
    - **信箱 `Application-specific password required`**：存成一般密碼了，要用 16 碼應用程式密碼。刪掉 `"pw_mail"` 再跑。學校如果鎖了應用程式密碼，就重跑時選不同步信箱。
    - **同步失敗看不懂**：用 `gh run view --repo <他的帳號>/betterel-sync --log-failed` 看錯誤。
+   - **講義下載有錯**：看 `<課程資料夾>\_moodle\log.txt` 最後幾行；登入失敗就重跑 `set_password.py`。
 
 4. 收尾：手機到 https://github.com/gtoki3177/BetterNDHUelearning/releases/latest 下載 `BetterElearning.apk` 安裝，再掃 QR code；電腦用 Chrome / Edge 開 `~/BetterElearning/setup-link.txt` 裡的連結，網址列可以「安裝應用程式」。登入用他在 Firebase 建的 email 和密碼（不是學校帳號）。
 
@@ -94,6 +95,8 @@ count 是 0 → 回覆「沒有新信要寫摘要」結束。指令失敗 → �
 建好後用 `run_scheduled_task` 跑一次，請他在桌面版核准排程要用的工具，之後就會自動跑。
 
 ### 講義下載和全文檢索（Windows，電腦要開著）
+
+安裝腳本的第 9 步已經會做這件事；使用者當時選了不要、或想換資料夾時，重跑 `install_full.py` 就會再問一次（換資料夾要先刪掉 `install-state.json` 裡的 `"pc_root"`）。以下是手動的做法。
 
 照 `LITE.md` 的第 1 步問根資料夾、第 2 步把 `files/` 放進 `<根資料夾>\_moodle\`、第 3 步只做 `setup.ps1`、`set_password.py`、`moodle_sync.py --force`（**不要**做信箱那段、不要做 `LITE.md` 第 4b、5、6 步）。要點教材直接開檔的話做 `LITE.md` 第 4 步。之後問 Claude「哪堂課講過 deadlock」就會用 search-materials 技能查。
 

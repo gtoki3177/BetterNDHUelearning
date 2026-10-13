@@ -34,7 +34,7 @@
    python "$HOME\Downloads\BetterNDHUelearning-main\plugins\better-ndhu-elearning\skills\setup\files\install_full.py"
    ```
 
-   照畫面一步步做，大約 15 分鐘。中斷了再跑一次會接著做。
+   照畫面一步步做，大約 15 分鐘。中斷了再跑一次會接著做。Windows 最後會問要不要把講義下載到電腦，選要的話之後每天自動下載新講義，電腦版 app 點教材就會直接打開檔案。
 
 裝完之後，想要 app 的「立即同步」按鈕、讓 Claude 替重要的信寫摘要、或下載講義到電腦，再跟 Claude 說「BetterElearning 的選用設定」。
 

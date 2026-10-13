@@ -97,6 +97,14 @@ function New-EveryTrigger([int]$Minutes) {
 }
 
 $action = New-ScheduledTaskAction -Execute $exe -Argument ('"{0}"' -f $script) -WorkingDirectory $here
+$actions = @($action)
+# 完整安裝 (BetterElearning app) 有放 cloud_push.py 的話: 同步完接著把教材路徑和索引統計補進 Firebase
+$push = Join-Path $here 'cloud_push.py'
+if (Test-Path $push) {
+    $actions += New-ScheduledTaskAction -Execute $exe -WorkingDirectory $here `
+        -Argument ('"{0}" overlay --dir "{1}" --config "{2}"' -f $push, $here, (Join-Path $here 'config.ini'))
+    Write-Host '同步完會接著把教材路徑補進 BetterElearning app (cloud_push.py)' -ForegroundColor DarkGray
+}
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
     -MultipleInstances IgnoreNew `
@@ -109,7 +117,7 @@ try { $logonTrigger.Delay = 'PT3M' } catch { }
 
 $name = 'NDHU Moodle Sync'
 try {
-    Register-ScheduledTask -TaskName $name -Action $action -Trigger @($logonTrigger, (New-EveryTrigger $Minutes)) `
+    Register-ScheduledTask -TaskName $name -Action $actions -Trigger @($logonTrigger, (New-EveryTrigger $Minutes)) `
         -Settings $settings -Force -ErrorAction Stop | Out-Null
     Write-Host ("[OK] {0}  (登入時 + 每 {1} 分鐘)" -f $name, $Minutes) -ForegroundColor Green
     foreach ($old in @('NDHU Moodle Sync (logon)', 'NDHU Moodle Sync (daily)')) {
