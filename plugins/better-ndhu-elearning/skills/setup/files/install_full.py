@@ -392,6 +392,14 @@ def pc_materials(st):
                          ("dept_label", p["dept_label"]), ("dept_pattern", p["dept_pattern"])):
             t = re.sub(rf"(?m)^{key} =.*$", lambda m, k=key, v=val: f"{k} = {v}", t, count=1)
         cfgp.write_text(t, encoding="utf-8")
+    # 作業、繳交狀態、行事曆由雲端同步負責；這台電腦每天只跑一次，只下載講義 (已經有的 config.ini 也補上)
+    t = cfgp.read_text(encoding="utf-8-sig")
+    if re.search(r"(?m)^light_sync\s*=", t):
+        t2 = re.sub(r"(?m)^light_sync\s*=.*$", "light_sync = false", t, count=1)
+    else:
+        t2 = re.sub(r"(?m)^\[moodle\][ \t]*$", lambda m: m.group(0) + "\nlight_sync = false", t, count=1)
+    if t2 != t:
+        cfgp.write_text(t2, encoding="utf-8")
     cp = configparser.ConfigParser()
     cp.read(cfgp, encoding="utf-8-sig")
     if not cp.has_section("cloud"):

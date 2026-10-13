@@ -16,6 +16,8 @@ NDHU e學苑 (Moodle) 同步器
   輕量 (light)  只看課程頁、作業頁、行事曆 (繳交狀態、新作業、期限), 不下載。十幾秒就好,
                 排程每 30 分鐘跑一次。--light 強制。
 不帶參數 = 自動: 今天還沒跑過完整的就跑完整, 否則跑輕量 (10 分鐘內剛跑過就跳過)。
+config.ini 設 light_sync = false (完整安裝 / BetterElearning app 用): 作業、繳交狀態、行事曆交給雲端同步,
+這台電腦每天只跑一次完整同步、只為了下載講義和建索引, 其他時候排程叫到也直接結束, 不登入 e學苑。
 內容沒變就不重寫 latest.json; 同一時間只會跑一個 (moodle.lock); 結果記在 status_moodle.json。
 
 密碼永遠不會以明文出現在這支程式或任何 log 裡。
@@ -665,6 +667,7 @@ def run(mode="heavy"):
     root = Path((S.get("root_folder") or "").strip() or str(HERE.parent))
     want_sem = S.get("semester", "auto")
     do_download = S.getboolean("download_materials", True) and not light
+    do_calendar = S.getboolean("light_sync", True)     # 只下載講義的話, 行事曆交給雲端同步
     do_index = S.getboolean("build_index", True)
     max_mb = S.getfloat("max_file_mb", 80.0)
     delay = S.getfloat("request_delay", 0.6)
@@ -914,7 +917,7 @@ def run(mode="heavy"):
 
     # ---- 行事曆 ----
     try:
-        for e in mo.calendar_events():
+        for e in (mo.calendar_events() if do_calendar else []):
             snapshot["events"].append({
                 "name": e.get("name"),
                 "course": course_folder_name((e.get("course") or {}).get("fullname", "")),
@@ -963,6 +966,16 @@ def run(mode="heavy"):
     return {"changed": changed, "pending": st["pending"], "assignments": st["assignments"]}
 
 
+def light_sync_enabled():
+    """config.ini 的 light_sync (預設 true)。false = 只下載講義: 每天一次完整同步, 不跑輕量同步。"""
+    cp = configparser.ConfigParser()
+    try:
+        cp.read(CONFIG_PATH, encoding="utf-8-sig")
+        return cp.getboolean("moodle", "light_sync", fallback=True)
+    except Exception:
+        return True
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -981,14 +994,20 @@ def main():
         except ValueError:
             return None
 
+    light_ok = light_sync_enabled()
     if "--force" in argv or "--heavy" in argv:
         mode = "heavy"
     elif "--light" in argv:
+        if not light_ok:
+            print("config.ini 設了 light_sync = false: 作業和行事曆交給雲端同步, 這台電腦只下載講義 (要下載用 --force)")
+            return 0
         mode = "light"
     else:
         lh, la = parse(last_heavy), parse(last_any)
         if not lh or lh.date() != dt.date.today():
             mode = "heavy"
+        elif not light_ok:
+            return 0                                   # 今天的講義下載過了; 作業和行事曆交給雲端同步
         elif la and (dt.datetime.now() - la).total_seconds() < MIN_GAP_MIN * 60:
             return 0                                   # 剛跑過, 安靜跳過 (不寫 log)
         else:
