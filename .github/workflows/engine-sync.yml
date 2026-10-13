@@ -4,9 +4,9 @@ name: BetterElearning engine
 #   jobs:
 #     sync:
 #       uses: gtoki3177/BetterNDHUelearning/.github/workflows/engine-sync.yml@v1
-#       with: { firebase_uid: ${{ vars.FIREBASE_UID }}, dept_label: ..., dept_pattern: ... }
+#       with: { engine_ref: v1, firebase_uid: ${{ vars.FIREBASE_UID }}, dept_label: ..., dept_pattern: ... }
 #       secrets: inherit        # MOODLE_USERNAME / MOODLE_PASSWORD / MAIL_APP_PASSWORD (選用) / FIREBASE_SA
-# 程式碼一律用這個 workflow 被呼叫時的那個版本 (@v1 就是 v1 標籤指到的 engine/)。
+# engine_ref 要跟 uses 後面的 @ 一樣，engine/ 的程式才會跟 workflow 同一個版本。
 on:
   workflow_call:
     inputs:
@@ -19,6 +19,10 @@ on:
       dept_pattern:
         type: string
         default: "系辦"
+      engine_ref:
+        description: "用哪個版本的 engine/：跟 uses 後面的 @ 一樣 (v1 / main / commit SHA)"
+        type: string
+        default: "v1"
 
 jobs:
   sync:
@@ -34,7 +38,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: gtoki3177/BetterNDHUelearning
-          ref: ${{ github.job_workflow_sha || 'v1' }}
+          ref: ${{ inputs.engine_ref }}
           sparse-checkout: engine
           path: src
 

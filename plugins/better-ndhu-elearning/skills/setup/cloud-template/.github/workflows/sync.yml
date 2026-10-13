@@ -11,6 +11,7 @@ jobs:
   sync:
     uses: gtoki3177/BetterNDHUelearning/.github/workflows/engine-sync.yml@v1
     with:
+      engine_ref: v1
       firebase_uid: ${{ vars.FIREBASE_UID }}
       dept_label: ${{ vars.DEPT_LABEL || '系上' }}
       dept_pattern: ${{ vars.DEPT_PATTERN || '系辦' }}
