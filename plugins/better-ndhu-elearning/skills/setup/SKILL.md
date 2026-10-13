@@ -5,7 +5,7 @@ description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網�
 
 # BetterNDHUelearning 安裝
 
-使用者多半不是工程背景：講白話，一次只給一小段要做的事。很多人是 Pro 方案、額度不多，所以**能讓腳本做的就不要自己一步步跑**，回覆也簡短。
+使用者多半不是工程背景：講白話，一次只給一小段要做的事。完整安裝的步驟都在安裝腳本裡，讓腳本跑，你負責解釋和處理錯誤。
 
 ## 硬規則
 
@@ -20,7 +20,7 @@ description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網�
 | 選項 | 適合誰 |
 |---|---|
 | **完整安裝（推薦）** | 想在手機上用 app、電腦關機也要更新。需要 GitHub 和個人 Google 帳號（免費），任何作業系統。 |
-| **輕量安裝** | 只想在 Claude 裡看儀表板。只支援 Windows，電腦和 Claude 桌面版開著才會更新，每天的排程會花 Claude 額度。 |
+| **輕量安裝** | 只想在 Claude 裡看儀表板。只支援 Windows，電腦和 Claude 桌面版開著才會更新。 |
 
 選輕量安裝：讀本技能資料夾的 `LITE.md`，照它做。以下是完整安裝。
 
@@ -56,13 +56,13 @@ app 選單裡的「立即同步」需要一組只能觸發他同步 repo 的 Git
 
 ### Claude 寫信件摘要（需要 Claude 桌面版開著）
 
-**會花 Claude 額度**：每跑一次大約是一段短對話，沒有新信時很快結束。Pro 方案建議一天一次（傍晚），額度多再改成每兩小時。
+排程每跑一次是一段短對話，沒有新信時很快結束。頻率可以照使用者的意思調整。
 
 1. 把本技能資料夾 `cloud-template/cloud/summaries.py` 和 `cloud_push.py` 複製到 `~/BetterElearning/cloud/`。
 2. `python -m pip install -q firebase-admin`
 3. 寫 `~/BetterElearning/config.ini`：`[cloud]`、`service_account = firebase-sa.json`、`uid = <UID>`（UID 在 `~/BetterElearning/install-state.json` 的 `"uid"`）。
 4. 測：`python ~/BetterElearning/cloud/summaries.py need --config ~/BetterElearning/config.ini`，要印出 `count`。
-5. 用 `create_scheduled_task` 建本機排程：`taskId` `betterel-mail-summaries`，標題「BetterElearning 信件摘要」，`cronExpression` Pro 方案用 `15 18 * * *`（每天 18:15），額度多用 `15 8-22/2 * * *`，`notifyOnCompletion` false，`prompt` 用下面這段（三個路徑換成實際路徑）：
+5. 用 `create_scheduled_task` 建本機排程：`taskId` `betterel-mail-summaries`，標題「BetterElearning 信件摘要」，`cronExpression` `15 8-22/2 * * *`（8–22 點每兩小時；只要一天一次就用 `15 18 * * *`），`notifyOnCompletion` false，`prompt` 用下面這段（三個路徑換成實際路徑）：
 
 ```text
 替 BetterElearning app 寫信件摘要。這是自動排程，沒人在旁邊，不要問問題，做完就結束。不要碰 firebase-sa.json 的內容。
