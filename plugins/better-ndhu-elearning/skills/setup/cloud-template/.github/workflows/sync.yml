@@ -1,0 +1,82 @@
+name: cloud-sync
+
+# 在 GitHub 的機器上登入 e學苑 / gms 信箱做輕量同步，產出 latest.json / mail.json。
+# 每小時跑一次；同步前從 Firestore 取回上一版，同步後寫回。也可以在 Actions 頁手動觸發。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 * * * *"   # 每小時第 17 分 (避開整點的排隊尖峰)
+
+concurrency:
+  group: cloud-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Taipei
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cloud/requirements.txt
+
+      - name: Install deps
+        run: pip install -q -r cloud/requirements.txt
+
+      - name: Write config.ini from secrets
+        env:
+          MOODLE_USERNAME: ${{ secrets.MOODLE_USERNAME }}
+          DEPT_LABEL: ${{ vars.DEPT_LABEL || '系上' }}
+          DEPT_PATTERN: ${{ vars.DEPT_PATTERN || '系辦' }}
+        run: |
+          if [ -z "$MOODLE_USERNAME" ]; then echo "secret MOODLE_USERNAME 沒設"; exit 1; fi
+          python3 - <<'PY'
+          import os
+          s = open("cloud/config.cloud.ini", encoding="utf-8").read()
+          for k in ("USERNAME", "DEPT_LABEL", "DEPT_PATTERN"):
+              s = s.replace(f"__{k}__", os.environ["MOODLE_USERNAME" if k == "USERNAME" else k])
+          open("cloud/config.ini", "w", encoding="utf-8").write(s)
+          PY
+          mkdir -p /tmp/betterel_root
+
+      - name: Pull previous state from Firestore
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          FIREBASE_UID: ${{ vars.FIREBASE_UID }}
+        working-directory: cloud
+        run: python cloud_push.py pull --dir .
+
+      - name: Moodle light sync
+        env:
+          MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
+          MOODLE_COOKIE_FILE: moodle_cookies.json
+        working-directory: cloud
+        run: python moodle_sync.py --light
+
+      - name: Mail sync
+        if: always()
+        env:
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+        working-directory: cloud
+        run: python mail_sync.py
+
+      - name: Push to Firestore
+        if: always()
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          FIREBASE_UID: ${{ vars.FIREBASE_UID }}
+        working-directory: cloud
+        run: python cloud_push.py push --dir . --source actions
+
+      - name: Status
+        if: always()
+        working-directory: cloud
+        run: |
+          python3 -c "import json;[print(k, {x: json.load(open(f'status_{k}.json', encoding='utf-8')).get(x) for x in ('ok','finished_at','changed')}) for k in ('moodle','mail')]" || true
+          tail -n 3 log.txt mail_log.txt || true

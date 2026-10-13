@@ -1,0 +1,57 @@
+name: probe-connectivity
+
+# 探測 GitHub 的 runner 連不連得到 e學苑和 Gmail IMAP。不需要任何 secret。
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/probe.yml"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Runner public IP and location
+        run: |
+          curl -s --max-time 10 https://ipinfo.io/json || echo "ipinfo failed"
+          echo
+
+      - name: e學苑 login page
+        run: |
+          set +e
+          code=$(curl -s -o /tmp/login.html -w "%{http_code}" --max-time 25 -A "BetterElearning-probe/1.0" \
+            https://elearn4.ndhu.edu.tw/moodle/login/index.php)
+          echo "HTTP status: $code"
+          echo "bytes: $(wc -c < /tmp/login.html)"
+          if grep -q 'name="logintoken"' /tmp/login.html; then
+            echo "RESULT moodle: OK (login form with logintoken found)"
+          else
+            echo "RESULT moodle: FAIL (no login form). First 600 bytes:"
+            head -c 600 /tmp/login.html; echo
+          fi
+
+      - name: e學苑 AJAX endpoint reachable
+        run: |
+          set +e
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -A "BetterElearning-probe/1.0" \
+            "https://elearn4.ndhu.edu.tw/moodle/lib/ajax/service.php?sesskey=x&info=core_course_get_enrolled_courses_by_timeline_classification" \
+            -H "Content-Type: application/json" --data '[]')
+          echo "HTTP status: $code (any 2xx/4xx means reachable; 000 means blocked)"
+          [ "$code" != "000" ] && echo "RESULT ajax: OK" || echo "RESULT ajax: FAIL"
+
+      - name: Gmail IMAP greeting
+        run: |
+          python3 - <<'PY'
+          import imaplib, socket
+          try:
+              c = imaplib.IMAP4_SSL("imap.gmail.com", 993, timeout=20)
+              print("greeting:", c.welcome)
+              c.logout()
+              print("RESULT imap: OK")
+          except Exception as e:
+              print("RESULT imap: FAIL", repr(e))
+          PY
+
+      - name: Python version available
+        run: python3 --version

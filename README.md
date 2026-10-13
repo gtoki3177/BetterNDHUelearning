@@ -1,5 +1,25 @@
 # BetterNDHUelearning
 
+東華大學 e學苑（Moodle）和 gms 學校信箱整合成 **BetterElearning**：作業倒數、信件分類和摘要、課程講義，手機和電腦都能看。
+
+## 兩種裝法
+
+| | 完整安裝（推薦） | 輕量安裝 |
+|---|---|---|
+| 在哪裡看 | Android app、電腦網頁版 [betterel.web.app](https://betterel.web.app)（可裝成獨立視窗） | Claude 裡的 artifact 儀表板 |
+| 同步 | GitHub 雲端每小時一次，**電腦不用開** | 你的 Windows 電腦，電腦和 Claude 桌面版開著才會更新 |
+| 釘選 / 打勾 / 備忘 | 手機和電腦即時互通，離線也能改 | 存在儀表板裡 |
+| 需要 | GitHub、個人 Google 帳號（都免費）；任何作業系統 | Windows、Claude 付費方案 |
+| 選用 | 電腦開著時：講義下載和全文檢索、Claude 寫信件摘要 | — |
+
+兩種都是在 Claude 桌面版裡跟 Claude 說「幫我設定 BetterNDHUelearning」，它會先問你要哪一種，再一步步帶你做。安裝外掛的方式見下面的〈安裝〉。
+
+Android app 在 [Releases](https://github.com/gtoki3177/BetterNDHUelearning/releases) 下載。app 是大家共用的，設定時 Claude 會給你一個專屬 QR code，掃了才會連到你自己的資料；你的資料放在你自己的 Firebase，別人（包括這個 repo 的作者）看不到。
+
+---
+
+以下是**輕量安裝**的說明。
+
 東華大學 e學苑（Moodle）和 gms 學校信箱的 Claude Cowork 外掛。自動整理成一個叫 **BetterElearning** 的儀表板，電腦開著時一天更新好幾次，手機也看得到：
 
 - **任務**：待交作業倒數、三週日曆、作業詳情，可以依截止日 / 課程 / 最新加入排序、依繳交狀態篩選；超過三份會變成可以左右拖曳的一排。可以一鍵複製「開始做這份作業」的 Claude prompt，講義路徑已經帶進去。
@@ -118,7 +138,9 @@ BetterElearning 儀表板               ▼
 
 ```
 plugins/better-ndhu-elearning/
-  skills/setup/            安裝流程；files/ 是會被複製到使用者 _moodle 資料夾的程式
+  skills/setup/            安裝流程：SKILL.md 是完整安裝、LITE.md 是輕量安裝
+                           cloud-template/ 是完整安裝時推到使用者私有 repo 的同步引擎 (GitHub Actions + Firestore)
+                           files/ 是會被複製到使用者 _moodle 資料夾的程式；files/setup_link.py 產生 app 的設定連結 / QR code
   skills/daily-update/     儀表板更新流程 (完整 / 快速模式)；scripts/build.py 產生儀表板；assets/dashboard.html 是範本
                            (改了範本記得調高裡面的 TEMPLATE_VERSION，使用者的頁面才會自動升級)
   skills/search-materials/ 講義全文檢索

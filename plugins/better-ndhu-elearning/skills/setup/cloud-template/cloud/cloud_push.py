@@ -1,0 +1,327 @@
+"""BetterElearning 雲端中繼：同步腳本和 Firestore 之間的搬運工。
+
+    python cloud_push.py pull --dir .                  # 同步前: 從 Firestore 取回上一次的原始檔和 e學苑 session
+    python cloud_push.py push --dir . --source actions # 同步後: 組成儀表板文件寫進 Firestore
+
+Firestore 結構 (都在 users/{uid}/ 底下):
+    dash/data      儀表板的 e學苑資料 (格式同 artifact 頁面資料庫的 dashboard/data)
+    dash/mail      儀表板的信箱資料 (只留未讀, 格式同 dashboard/mail)
+    dash/settings  各同步引擎上次跑的時間和結果 (engines.<source>)
+    engine/moodle_raw, engine/mail_raw   moodle_sync.py / mail_sync.py 的原始輸出 (字串), 給下次同步當「上一版」
+    engine/session                       e學苑登入 cookie, 讓下次同步不用重新登入
+    engine/summaries                     電腦端寫好的信件摘要 {uid: {summary, action, flash}} (選用)
+
+金鑰: 環境變數 FIREBASE_SA (服務帳戶 JSON 內容) 或 FIREBASE_SA_FILE (路徑)。帳號: FIREBASE_UID。
+這支程式只印統計數字, 不印信件內容。
+"""
+
+import argparse
+import configparser
+import json
+import os
+import re
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+TZ = timezone(timedelta(hours=8))
+
+# ---- 信件分類: 跟頁面 JS、daily-update 的 build.py 一致 ----
+NOISE_ADDR = ["no-reply@accounts.google.com", "elearn@gms.ndhu.edu.tw"]
+NOISE_SUBJ = [r"安全性快訊", r"安全性警示", r"新登入紀錄", r"(?i)newsletter"]
+BULK_ADDR = ["announce@gms.ndhu.edu.tw"]
+DIGEST = r"批次寄送"
+STRONG = ["截止", "逾期", "繳費", "選課", "停課", "補課", "調課",
+          "成績", "獎學金", "考試", "註冊", "重要"]
+DEFAULT_DEPT_MAP = "CSIE:資訊工程學系, EE:電機工程學系, GC:通識教育中心, XX:通識教育中心, YY:體育中心"
+DOC_LIMIT = 900 * 1024      # Firestore 單一文件上限 1 MiB, 留一點空間
+
+RAW = {"moodle_raw": "latest.json", "mail_raw": "mail.json"}
+COOKIE_FILE = "moodle_cookies.json"
+
+
+# --------------------------------------------------------------------------- 轉換 (搬自 daily-update/scripts/build.py)
+
+def tz(s):
+    if not s:
+        return None
+    s = str(s)
+    if re.search(r"[+-]\d\d:\d\d$|Z$", s):
+        return s
+    if len(s) == 16:
+        s += ":00"
+    return s + "+08:00"
+
+
+def when(s):
+    try:
+        return datetime.fromisoformat(tz(s).replace("Z", "+00:00")) if s else None
+    except ValueError:
+        return None
+
+
+def excerpt(body, n=260):
+    body = body or ""
+    lines = [l for l in body.splitlines()
+             if not re.match(r"^\s*(分類|來源|對象|標題|日期|附檔)[：:]", l)]
+    s = "\n".join(lines)
+    s = re.sub(r"https?://\S+|www\.\S+", "", s)
+    s = re.sub(r"[-=_*]{4,}", "", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s[:n] + " …" if len(s) > n else s
+
+
+def short_name(name):
+    m = re.match(r"^全民國防教育軍事訓練課程[-－](.+)$", name or "")
+    return f"全民國防－{m.group(1)}" if m else name
+
+
+def bucket(m, noise_addr):
+    if m["addr"] in noise_addr or any(re.search(p, m["subject"]) for p in NOISE_SUBJ):
+        return "noise"
+    if re.search(DIGEST, m["subject"]):
+        return "bulk"
+    if m["addr"] in BULK_ADDR:
+        return "focus" if len([k for k in m["kw"] if k in STRONG]) >= 2 else "bulk"
+    return "focus"
+
+
+def load_config(p, extra_noise=()):
+    cp = configparser.ConfigParser()
+    if p and Path(p).exists():
+        cp.read(p, encoding="utf-8-sig")
+    d = cp["dashboard"] if cp.has_section("dashboard") else {}
+    get = lambda k, fb="": (d.get(k, fb) if hasattr(d, "get") else fb) or fb
+    dept_map = {}
+    for part in get("dept_map", DEFAULT_DEPT_MAP).split(","):
+        if ":" in part:
+            k, v = part.split(":", 1)
+            dept_map[k.strip()] = v.strip()
+    noise = [x.strip() for x in get("noise_senders", "").split(",") if x.strip()]
+    noise += [x for x in extra_noise if x and x not in noise]
+    return {"dept_map": dept_map,
+            "dept": {"label": get("dept_label", "系上").strip() or "系上",
+                     "pattern": get("dept_pattern", "系辦").strip() or "系辦"},
+            "noise": noise}
+
+
+def build_data(L, prev, cfg):
+    prev = prev or {}
+    gen = tz(L.get("generated_at"))
+    old_fs = {a["url"]: a.get("first_seen") for a in prev.get("assignments", [])}
+    old_local = {i["url"]: i.get("local") for c in prev.get("courses", [])
+                 for i in c.get("items", []) if i.get("local")}
+    old_dept = {c["code"]: c.get("dept") for c in prev.get("courses", [])}
+
+    assignments = []
+    for a in L.get("assignments", []):
+        assignments.append({
+            "course": a.get("course"), "code": a.get("course_code"), "name": a.get("name"),
+            "due": tz(a.get("due")), "open": tz(a.get("open")),
+            "first_seen": old_fs.get(a.get("url")) or gen,
+            "url": a.get("url"), "submitted": bool(a.get("submitted")),
+            "submission": a.get("submission"), "grading": a.get("grading"),
+            "description": a.get("description") or "",
+        })
+
+    order = lambda k: 0 if k == "assign" else (2 if k == "forum" else 1)
+    courses = []
+    for c in L.get("courses", []):
+        items = []
+        for act in c.get("activities", []):
+            it = {"kind": act.get("type"), "name": act.get("name"), "url": act.get("url")}
+            loc = act.get("local") or old_local.get(act.get("url"))
+            if loc:
+                it["local"] = loc
+            items.append(it)
+        items.sort(key=lambda i: order(i["kind"]))
+        code = c.get("code") or ""
+        pre = (re.match(r"[A-Z]+", code) or [""])[0]
+        courses.append({
+            "code": code, "name": short_name(c.get("name")), "id": c.get("id"),
+            "dept": cfg["dept_map"].get(pre) or old_dept.get(code) or "",
+            "items": items,
+        })
+
+    # 雲端不建索引: 有統計 (電腦端) 才用, 否則沿用上一版
+    st = L.get("stats", {}) or {}
+    if st.get("index"):
+        index = {"files": st.get("indexed_files", 0), "chunks": st.get("indexed_chunks", 0),
+                 "courses": st.get("index", [])}
+    else:
+        index = dict(prev.get("index") or {"files": 0, "chunks": 0, "courses": []})
+
+    errors = list(L.get("errors") or [])
+    if L.get("last_run_failed"):
+        errors.insert(0, f"Moodle 同步在 {L['last_run_failed']} 失敗，資料可能是舊的")
+
+    return {"generated_at": gen, "semester": L.get("semester") or prev.get("semester", ""),
+            "root": prev.get("root", ""),
+            "assignments": assignments, "courses": courses, "index": index, "errors": errors}
+
+
+def build_mail(M, prev, cfg, summaries):
+    prev = prev or {}
+    old = {m["uid"]: m for m in prev.get("messages", [])}
+    msgs = []
+    for m in M.get("messages", []):
+        if not m.get("unread"):
+            continue
+        atts = [a if isinstance(a, str) else (a.get("filename") or a.get("name") or "")
+                for a in (m.get("attachments") or [])]
+        r = {"uid": str(m.get("uid")), "date": m.get("date"), "from": m.get("from_name") or m.get("from_addr"),
+             "addr": (m.get("from_addr") or "").lower(), "subject": m.get("subject") or "",
+             "kw": m.get("keywords") or [], "att": len(atts), "atts": atts,
+             "link": m.get("link"), "excerpt": excerpt(m.get("body"))}
+        src = {**old.get(r["uid"], {}), **summaries.get(r["uid"], {})}
+        for k in ("summary", "action", "flash"):
+            if src.get(k):
+                r[k] = src[k]
+        msgs.append(r)
+    return {"generated_at": tz(M.get("generated_at")), "account": M.get("account"),
+            "window_days": M.get("window_days"), "stats": M.get("stats", {}),
+            "messages": msgs, "noise": cfg["noise"], "dept": cfg["dept"],
+            "errors": list(M.get("errors") or [])}
+
+
+def fit_mail(mail, noise_addr):
+    size = lambda: len(json.dumps(mail, ensure_ascii=False).encode("utf-8"))
+    trimmed = 0
+    for level in ("noise", "bulk"):
+        if size() <= DOC_LIMIT:
+            break
+        for r in mail["messages"]:
+            if bucket(r, noise_addr) == level and r.get("excerpt"):
+                r["excerpt"] = ""
+                trimmed += 1
+    while size() > DOC_LIMIT and mail["messages"]:
+        mail["messages"].pop()
+        trimmed += 1
+    return trimmed
+
+
+# --------------------------------------------------------------------------- Firestore
+
+def connect():
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+    raw = os.environ.get("FIREBASE_SA")
+    path = os.environ.get("FIREBASE_SA_FILE")
+    if raw and raw.strip():
+        cred = credentials.Certificate(json.loads(raw))
+    elif path:
+        cred = credentials.Certificate(path)
+    else:
+        sys.exit("沒有 Firebase 金鑰：設 FIREBASE_SA (JSON 內容) 或 FIREBASE_SA_FILE (路徑)")
+    uid = (os.environ.get("FIREBASE_UID") or "").strip()
+    if not uid:
+        sys.exit("沒有 FIREBASE_UID")
+    firebase_admin.initialize_app(cred)
+    return firestore.client().collection("users").document(uid)
+
+
+def get(ref):
+    snap = ref.get()
+    return snap.to_dict() if snap.exists else None
+
+
+def now_iso():
+    return datetime.now(TZ).isoformat(timespec="seconds")
+
+
+def read_json(p):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def strip_meta(doc):
+    return {k: v for k, v in (doc or {}).items() if k not in ("written_at", "written_by")}
+
+
+def cmd_pull(user, d):
+    for doc_id, fname in RAW.items():
+        doc = get(user.collection("engine").document(doc_id))
+        if doc and doc.get("json"):
+            (d / fname).write_text(doc["json"], encoding="utf-8")
+            print(f"pull {doc_id}: {len(doc['json'])} bytes")
+        else:
+            print(f"pull {doc_id}: 沒有上一版 (第一次跑)")
+    sess = get(user.collection("engine").document("session"))
+    if sess and sess.get("cookies"):
+        (d / COOKIE_FILE).write_text(sess["cookies"], encoding="utf-8")
+        print("pull session: ok")
+
+
+def cmd_push(user, d, source, save_state):
+    dash, engine = user.collection("dash"), user.collection("engine")
+    L, M = read_json(d / "latest.json"), read_json(d / "mail.json")
+    settings = get(dash.document("settings")) or {}
+    summaries = (get(engine.document("summaries")) or {})
+    summaries.pop("written_at", None)
+    cfg = load_config(d / "config.ini", settings.get("noise_senders") or [])
+    written = {"written_at": now_iso(), "written_by": source}
+    out = {}
+
+    if L:
+        prev = get(dash.document("data"))
+        data = build_data(L, prev, cfg)
+        p_at, n_at = when((prev or {}).get("generated_at")), when(data["generated_at"])
+        if prev and p_at and n_at and p_at > n_at:
+            out["data"] = "skip (Firestore 上的比較新)"
+        elif strip_meta(prev) == data:
+            out["data"] = "unchanged"
+        else:
+            dash.document("data").set({**data, **written})
+            out["data"] = f"written ({len(data['courses'])} courses, {len(data['assignments'])} assignments)"
+
+    if M:
+        prev = get(dash.document("mail"))
+        mail = build_mail(M, prev, cfg, summaries)
+        trimmed = fit_mail(mail, NOISE_ADDR + cfg["noise"])
+        p_at, n_at = when((prev or {}).get("generated_at")), when(mail["generated_at"])
+        if prev and p_at and n_at and p_at > n_at:
+            out["mail"] = "skip (Firestore 上的比較新)"
+        elif strip_meta(prev) == mail:
+            out["mail"] = "unchanged"
+        else:
+            dash.document("mail").set({**mail, **written})
+            out["mail"] = f"written ({len(mail['messages'])} unread" + (f", trimmed {trimmed}" if trimmed else "") + ")"
+
+    if save_state:
+        for doc_id, fname in RAW.items():
+            p = d / fname
+            if p.exists():
+                engine.document(doc_id).set({"json": p.read_text(encoding="utf-8"), "at": now_iso()})
+        c = d / COOKIE_FILE
+        if c.exists():
+            engine.document("session").set({"cookies": c.read_text(encoding="utf-8"), "at": now_iso()})
+
+    status = {k: read_json(d / f"status_{k}.json") for k in ("moodle", "mail")}
+    dash.document("settings").set(
+        {"engines": {source: {"at": now_iso(), **{k: v for k, v in status.items() if v}}}}, merge=True)
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def main():
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    ap = argparse.ArgumentParser()
+    ap.add_argument("cmd", choices=["pull", "push"])
+    ap.add_argument("--dir", default=".")
+    ap.add_argument("--source", default="actions", help="actions / pc：寫進 settings.engines 的名字")
+    ap.add_argument("--no-state", action="store_true", help="push 時不寫回原始檔和 session (電腦端用)")
+    a = ap.parse_args()
+    user = connect()
+    d = Path(a.dir)
+    if a.cmd == "pull":
+        cmd_pull(user, d)
+    else:
+        cmd_push(user, d, a.source, not a.no_state)
+
+
+if __name__ == "__main__":
+    main()

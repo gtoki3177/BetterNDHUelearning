@@ -1,0 +1,7 @@
+cloud/config.ini
+cloud/*.json
+cloud/*.txt
+!cloud/requirements.txt
+cloud/*.lock
+cloud/state.db
+__pycache__/
