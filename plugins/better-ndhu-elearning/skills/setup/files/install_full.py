@@ -600,6 +600,62 @@ def main():
 
 
 # ------------------------------------------------------------------ 檢查 (python install.py --check)
+def secret_fix(repo, name, prompt):
+    """當場重設一個 secret (使用者自己在這個視窗輸入，畫面不顯示)，再跑一次同步。"""
+    if yes(f"\n  要現在重新輸入{prompt}、馬上再同步一次嗎？"):
+        say("  輸入時畫面上不會顯示你打的字，打完按 Enter。")
+        run(["gh", "secret", "set", name, "--repo", repo], capture=False)
+        run(["gh", "workflow", "run", "sync.yml", "--repo", repo])
+        say(f"  已經重新同步，1–2 分鐘後再跑一次 python install.py --check 看結果。")
+        return True
+    return False
+
+
+def diagnose_run(repo, rid, student, problems):
+    """看最近一次失敗的同步紀錄，認得的錯誤直接講怎麼修。"""
+    log = run(["gh", "run", "view", rid, "--repo", repo, "--log-failed"], check=False).stdout or ""
+    if not log.strip():                                     # workflow 本身沒跑起來時沒有步驟紀錄，改看摘要
+        log = run(["gh", "run", "view", rid, "--repo", repo], check=False).stdout or ""
+    low = log.lower()
+    def has(*keys):
+        return any(k.lower() in low for k in keys)
+    if has("secret MOODLE_USERNAME 沒設"):
+        problems.append(("同步 repo 沒有設學號 (MOODLE_USERNAME)", f"gh secret set MOODLE_USERNAME --repo {repo} --body {student or '<學號>'}"))
+    elif has("找不到 cred.dat"):                            # 雲端沒拿到 MOODLE_PASSWORD 時，程式會退回找電腦版的密碼檔
+        if not secret_fix(repo, "MOODLE_PASSWORD", " e學苑密碼"):
+            problems.append(("同步 repo 沒有設 e學苑密碼 (MOODLE_PASSWORD)", f"gh secret set MOODLE_PASSWORD --repo {repo}"))
+    elif has("帳號或密碼不對"):
+        if not secret_fix(repo, "MOODLE_PASSWORD", " e學苑密碼"):
+            problems.append(("e學苑登入失敗：學號或密碼不對", f"gh secret set MOODLE_PASSWORD --repo {repo}（學號不對的話改 MOODLE_USERNAME）"))
+    elif has("imap access is disabled", "imap is disabled"):
+        problems.append(("學校把 gms 信箱的 IMAP 關了，信箱沒辦法同步", f"gh secret delete MAIL_APP_PASSWORD --repo {repo}（之後只同步 e學苑）"))
+    elif has("application-specific", "invalid credentials"):
+        say("  信箱要用 16 碼的「應用程式密碼」，在 https://myaccount.google.com/apppasswords 用 gms 帳號產生。")
+        if not secret_fix(repo, "MAIL_APP_PASSWORD", "信箱的應用程式密碼"):
+            problems.append(("gms 信箱登入失敗：要用 16 碼應用程式密碼", f"gh secret set MAIL_APP_PASSWORD --repo {repo}"))
+    elif has("沒有 Firebase 金鑰"):
+        problems.append(("同步 repo 沒有設 Firebase 金鑰 (FIREBASE_SA)",
+                         f"在 PowerShell 執行：Get-Content \"{WORK / 'firebase-sa.json'}\" -Raw | gh secret set FIREBASE_SA --repo {repo}"))
+    elif has("沒有 FIREBASE_UID"):
+        problems.append(("同步 repo 沒有設 FIREBASE_UID", f"gh variable set FIREBASE_UID --repo {repo} --body <app 登入帳號的 UID>"))
+    elif has("database (default) does not exist", "the database (default) does not exist"):
+        problems.append(("Firebase 專案還沒建資料庫", "到 Firebase 網頁的 Firestore Database 按「建立資料庫」，位置選 asia-east1"))
+    else:
+        lines = []
+        for line in log.splitlines():
+            text = line.split("\t")[-1]
+            text = re.sub(r"^\d{4}-\d\d-\d\dT[\d:.]+Z\s?", "", text).rstrip()
+            if text and not text.startswith(("##[group]", "##[endgroup]", "[command]")):
+                lines.append(text)
+        errs = [i for i, t in enumerate(lines) if t.startswith("##[error]")]
+        # 第一個錯誤和它前面幾行 (通常就是原因)，再加上之後不一樣的錯誤訊息；沒有錯誤標記就印最後幾行
+        show = (lines[max(0, errs[0] - 10):errs[0] + 1] + list(dict.fromkeys(lines[i] for i in errs[1:]))[:3]) if errs else lines[-15:]
+        say("  最近一次失敗的紀錄：")
+        for t in show:
+            say("    " + t[:200])
+        problems.append(("最近的同步失敗，原因不在常見清單裡", "把上面那段紀錄傳給幫你裝的人，或到 GitHub 開 issue"))
+
+
 def check():
     """app 登入了卻沒資料時用：比對同步 repo、Firebase 專案、登入帳號的 UID 和資料庫裡實際有資料的帳號。"""
     say("BetterElearning 檢查")
@@ -626,8 +682,8 @@ def check():
         say(f"  {x['createdAt'][:16].replace('T', ' ')} UTC  {x['event']:<17} {x['conclusion'] or x['status']}")
     if not runs:
         problems.append(("一次都沒有同步過", f"gh workflow run sync.yml --repo {repo}"))
-    elif not any(x["conclusion"] == "success" for x in runs):
-        problems.append(("最近的同步都沒有成功", f"gh run view {runs[0]['databaseId']} --repo {repo} --log-failed"))
+    elif runs[0]["conclusion"] not in ("success", None, ""):
+        diagnose_run(repo, str(runs[0]["databaseId"]), (st.get("profile") or {}).get("student", ""), problems)
 
     # 2. 專案和 UID
     say("\n━━ 2. Firebase 專案和帳號")
