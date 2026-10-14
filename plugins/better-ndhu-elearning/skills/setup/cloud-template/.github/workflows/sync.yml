@@ -2,6 +2,7 @@ name: cloud-sync
 
 # 每小時第 17 分同步一次 (也可以在 Actions 頁、或 app 的「立即同步」手動觸發)。
 # 同步程式在 gtoki3177/BetterNDHUelearning 的 engine/，跟著 v1 版自動更新；密碼放在這個 repo 的 Secrets。
+# secrets 要一個一個傳：呼叫別的帳號的 workflow 時，secrets: inherit 不會把密碼傳過去。
 on:
   workflow_dispatch:
   schedule:
@@ -15,4 +16,12 @@ jobs:
       firebase_uid: ${{ vars.FIREBASE_UID }}
       dept_label: ${{ vars.DEPT_LABEL || '系上' }}
       dept_pattern: ${{ vars.DEPT_PATTERN || '系辦' }}
-    secrets: inherit
+    secrets:
+      MOODLE_USERNAME: ${{ secrets.MOODLE_USERNAME }}
+      MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
+      MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+      FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+      SUMMARY_PROVIDER: ${{ secrets.SUMMARY_PROVIDER }}
+      SUMMARY_BASE_URL: ${{ secrets.SUMMARY_BASE_URL }}
+      SUMMARY_MODEL: ${{ secrets.SUMMARY_MODEL }}
+      SUMMARY_API_KEY: ${{ secrets.SUMMARY_API_KEY }}

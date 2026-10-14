@@ -250,6 +250,27 @@ def firebase_console(st):
         say(f"  金鑰放在 {sa}")
 
 
+def update_caller(repo):
+    """同步 repo 裡的 sync.yml 跟範本不一樣 (例如舊版的 secrets: inherit，別的帳號用會傳不到密碼) 就換成新的。回傳有沒有更新。"""
+    import base64
+    path = ".github/workflows/sync.yml"
+    want = (TEMPLATE / path).read_text(encoding="utf-8").replace("\r\n", "\n")
+    r = run(["gh", "api", f"repos/{repo}/contents/{path}"], check=False)
+    if r.returncode != 0:
+        return False
+    cur = json.loads(r.stdout)
+    if base64.b64decode(cur["content"]).decode("utf-8").replace("\r\n", "\n") == want:
+        return False
+    put = ["gh", "api", "-X", "PUT", f"repos/{repo}/contents/{path}", "-f", "message=更新同步設定：secrets 改成一個一個傳",
+           "-f", "content=" + base64.b64encode(want.encode("utf-8")).decode(), "-f", "sha=" + cur["sha"]]
+    if run(put, check=False).returncode != 0:
+        say("  更新同步設定需要 GitHub 的 workflow 權限，會打開瀏覽器請你同意一次。")
+        run(["gh", "auth", "refresh", "-h", "github.com", "-s", "workflow"], capture=False, check=False)
+        run(put)
+    say("  已更新同步 repo 的 sync.yml。")
+    return True
+
+
 def github_repo(st):
     p = st["profile"]
     step(6, "建你自己的同步 repo（GitHub，私人）")
@@ -274,6 +295,8 @@ def github_repo(st):
             run(["git", "push", "-q", "-u", "origin", "main"], cwd=str(local))
         else:
             run(["gh", "repo", "create", REPO_NAME, "--private", "--source", ".", "--push"], cwd=str(local))
+    else:
+        update_caller(repo)                                  # 舊版裝的 repo：同步設定換成新版
     st["repo"] = repo
     save_state(st)
     say(f"  repo：https://github.com/{repo}")
@@ -671,7 +694,18 @@ def diagnose_run(repo, rid, student, problems):
     def has(*keys):
         return any(k.lower() in low for k in keys)
     if has("secret MOODLE_USERNAME 沒設"):
-        problems.append(("同步 repo 沒有設學號 (MOODLE_USERNAME)", f"gh secret set MOODLE_USERNAME --repo {repo} --body {student or '<學號>'}"))
+        r = run(["gh", "secret", "list", "--repo", repo, "--json", "name"], check=False)
+        names = {x["name"] for x in json.loads(r.stdout or "[]")} if r.returncode == 0 else set()
+        if "MOODLE_USERNAME" in names:
+            # secret 明明有設卻沒傳到：舊版 sync.yml 用 secrets: inherit，跨帳號呼叫時密碼傳不過去
+            say("  學號其實有設，是舊版的同步設定沒把密碼傳給同步程式。")
+            if update_caller(repo):
+                run(["gh", "workflow", "run", "sync.yml", "--repo", repo])
+                say("  已經更新並重新同步，1–2 分鐘後再跑一次 python install.py --check 看結果。")
+            else:
+                problems.append(("學號有設但沒傳到同步程式", "把這段結果傳給幫你裝的人"))
+        else:
+            problems.append(("同步 repo 沒有設學號 (MOODLE_USERNAME)", f"gh secret set MOODLE_USERNAME --repo {repo} --body {student or '<學號>'}"))
     elif has("找不到 cred.dat"):                            # 雲端沒拿到 MOODLE_PASSWORD 時，程式會退回找電腦版的密碼檔
         if not secret_fix(repo, "MOODLE_PASSWORD", " e學苑密碼"):
             problems.append(("同步 repo 沒有設 e學苑密碼 (MOODLE_PASSWORD)", f"gh secret set MOODLE_PASSWORD --repo {repo}"))

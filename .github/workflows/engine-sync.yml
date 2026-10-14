@@ -5,8 +5,8 @@ name: BetterElearning engine
 #     sync:
 #       uses: gtoki3177/BetterNDHUelearning/.github/workflows/engine-sync.yml@v1
 #       with: { engine_ref: v1, firebase_uid: ${{ vars.FIREBASE_UID }}, dept_label: ..., dept_pattern: ... }
-#       secrets: inherit        # MOODLE_USERNAME / MOODLE_PASSWORD / MAIL_APP_PASSWORD (選用) / FIREBASE_SA
-#                               # 信件摘要 (選用)：SUMMARY_PROVIDER / SUMMARY_BASE_URL / SUMMARY_MODEL / SUMMARY_API_KEY
+#       secrets:                # 一個一個明確傳：別的帳號的 repo 用 secrets: inherit 傳不過來 (只限同一個帳號或組織)
+#         MOODLE_USERNAME: ${{ secrets.MOODLE_USERNAME }}   … 下面 secrets: 列的每一個都照這樣寫
 # engine_ref 要跟 uses 後面的 @ 一樣，engine/ 的程式才會跟 workflow 同一個版本。
 on:
   workflow_call:
@@ -24,6 +24,23 @@ on:
         description: "用哪個版本的 engine/：跟 uses 後面的 @ 一樣 (v1 / main / commit SHA)"
         type: string
         default: "v1"
+    secrets:
+      MOODLE_USERNAME:
+        required: false
+      MOODLE_PASSWORD:
+        required: false
+      MAIL_APP_PASSWORD:        # 選用：沒設就不同步信箱
+        required: false
+      FIREBASE_SA:
+        required: false
+      SUMMARY_PROVIDER:         # 選用：信件摘要
+        required: false
+      SUMMARY_BASE_URL:
+        required: false
+      SUMMARY_MODEL:
+        required: false
+      SUMMARY_API_KEY:
+        required: false
 
 jobs:
   sync:
