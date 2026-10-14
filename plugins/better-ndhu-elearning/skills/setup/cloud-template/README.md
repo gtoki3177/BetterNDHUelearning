@@ -17,6 +17,8 @@ repo 請設成 **private**。
 | Secret | `MOODLE_PASSWORD` | e學苑密碼 |
 | Secret | `MAIL_APP_PASSWORD` | 選用：gms 信箱的 Google 應用程式密碼（16 碼），沒設就不同步信箱 |
 | Secret | `FIREBASE_SA` | Firebase 服務帳戶金鑰（JSON 全文） |
+| Secret | `SUMMARY_MODEL`、`SUMMARY_API_KEY` | 選用：信件摘要用的模型和 API 金鑰。設了就會在每次同步後替需注意的新信寫摘要 |
+| Secret | `SUMMARY_PROVIDER`、`SUMMARY_BASE_URL` | 選用：`openai`（預設，OpenAI 相容 API，要填 `SUMMARY_BASE_URL`，例如 `https://api.openai.com/v1`）或 `anthropic` |
 | Variable | `FIREBASE_UID` | Firebase 登入帳號的 UID |
 | Variable | `DEPT_LABEL`、`DEPT_PATTERN` | 選填：系上的名稱和信件比對用的關鍵字，例如 `電機系`、`電機\|EE\|系辦` |
 
@@ -26,4 +28,4 @@ repo 請設成 **private**。
 |---|---|
 | `.github/workflows/probe.yml` | 只測連線：GitHub 的機器連不連得到 e學苑和 Gmail |
 | `firestore.rules` | Firestore 安全規則：每個帳號只讀寫得到自己的資料 |
-| `cloud/summaries.py`、`cloud/cloud_push.py` | 選用，在電腦上跑：讓 Claude 替需注意的信寫摘要，存回 Firestore |
+| `cloud/summaries.py`、`cloud/cloud_push.py` | 選用，在電腦上跑：用本地模型、API 或 agent 替需注意的信寫摘要，存回 Firestore（`python cloud/summaries.py --help`） |

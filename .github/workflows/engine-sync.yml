@@ -6,6 +6,7 @@ name: BetterElearning engine
 #       uses: gtoki3177/BetterNDHUelearning/.github/workflows/engine-sync.yml@v1
 #       with: { engine_ref: v1, firebase_uid: ${{ vars.FIREBASE_UID }}, dept_label: ..., dept_pattern: ... }
 #       secrets: inherit        # MOODLE_USERNAME / MOODLE_PASSWORD / MAIL_APP_PASSWORD (選用) / FIREBASE_SA
+#                               # 信件摘要 (選用)：SUMMARY_PROVIDER / SUMMARY_BASE_URL / SUMMARY_MODEL / SUMMARY_API_KEY
 # engine_ref 要跟 uses 後面的 @ 一樣，engine/ 的程式才會跟 workflow 同一個版本。
 on:
   workflow_call:
@@ -98,6 +99,24 @@ jobs:
           FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
           FIREBASE_UID: ${{ inputs.firebase_uid }}
         run: python cloud_push.py push --dir . --source actions
+
+      - name: Mail summaries
+        # 選用：caller repo 設了 SUMMARY_MODEL (和 SUMMARY_BASE_URL、SUMMARY_API_KEY…) 這幾個 secret 才會跑。
+        # 用 OpenAI 相容 API 或 Anthropic API 替需注意的新信寫摘要；失敗不影響同步結果。
+        if: always()
+        continue-on-error: true
+        working-directory: src/engine
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          FIREBASE_UID: ${{ inputs.firebase_uid }}
+          SUMMARY_PROVIDER: ${{ secrets.SUMMARY_PROVIDER }}
+          SUMMARY_BASE_URL: ${{ secrets.SUMMARY_BASE_URL }}
+          SUMMARY_MODEL: ${{ secrets.SUMMARY_MODEL }}
+          SUMMARY_API_KEY: ${{ secrets.SUMMARY_API_KEY }}
+        run: |
+          if [ -z "$SUMMARY_MODEL" ]; then echo "沒設 SUMMARY_MODEL，略過信件摘要"; exit 0; fi
+          if [ "$SUMMARY_PROVIDER" = "anthropic" ]; then pip install -q anthropic; fi
+          python summaries.py auto
 
       - name: Status
         if: always()

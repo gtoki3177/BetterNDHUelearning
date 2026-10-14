@@ -55,7 +55,11 @@ description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網�
 
 app 選單裡的「立即同步」需要一組只能觸發他同步 repo 的 GitHub token。請他自己做（token 不要貼給你）：GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token；Repository access 只選 `betterel-sync`；Permissions 把 **Actions** 設成 Read and write；到期日最長一年。產生後在 app 的「設定」頁填 repo（`<他的帳號>/betterel-sync`）和 token。手機設好電腦也能用。
 
-### Claude 寫信件摘要（需要 Claude 桌面版開著）
+### 信件摘要
+
+最簡單的做法是請他重跑安裝腳本（`python install.py`，在 repo 根目錄），最後一步可以選雲端 API（OpenAI、Gemini、Anthropic…，GitHub 每小時順便寫）、本地模型（Ollama、LM Studio）或電腦上的 agent 指令。金鑰讓他自己在腳本裡輸入，不要貼給你。
+
+他想用 Claude 桌面版的排程來寫（不用 API 金鑰，但桌面版要開著）的話，照下面做。
 
 排程每跑一次是一段短對話，沒有新信時很快結束。頻率可以照使用者的意思調整。
 

@@ -1,24 +1,35 @@
 # BetterNDHUelearning
 
-東華大學 e學苑（Moodle）和 gms 學校信箱整合成 **BetterElearning**：作業倒數、信件分類和摘要、課程講義，手機和電腦都能看。
+把東華大學 e學苑（Moodle）和 gms 學校信箱整合成 **BetterElearning**：作業倒數、信件分類和摘要、課程講義，手機 app 和電腦網頁版都能看。
 
-## 兩種裝法
+> 這不是學校官方的東西，也和學校沒有任何關係。它用你自己的帳號登入、只抓你自己的資料。
 
-| | 完整安裝（推薦） | 輕量安裝 |
-|---|---|---|
-| 在哪裡看 | Android app、電腦網頁版 [betterel.web.app](https://betterel.web.app)（可裝成獨立視窗） | Claude 裡的 artifact 儀表板 |
-| 同步 | GitHub 雲端每小時一次，**電腦不用開** | 你的 Windows 電腦，電腦和 Claude 桌面版開著才會更新 |
-| 釘選 / 打勾 / 備忘 | 手機和電腦即時互通，離線也能改 | 存在儀表板裡 |
-| 需要 | GitHub、個人 Google 帳號（都免費）；任何作業系統 | Windows、Claude 付費方案 |
-| 選用 | 電腦開著時：講義下載和全文檢索、Claude 寫信件摘要 | — |
+## 功能
 
-兩種都可以在 Claude 桌面版裡跟 Claude 說「幫我設定 BetterNDHUelearning」，它會先問你要哪一種，再帶你做。安裝外掛的方式見下面的〈安裝〉。
+- **任務**：待交作業倒數、日曆、作業詳情，依截止日或課程排序、依繳交狀態篩選。
+- **信箱**：未讀信自動分成系上、課程、學校單位、校園公告、系統通知。需要注意的信會標出關鍵字，也可以接語言模型寫中文摘要和要做的事。
+- **課程 / 教材**：每門課的活動和講義連結。選用：講義下載到電腦、建全文索引，電腦版點教材直接開檔。
+- **釘選、打勾、備忘**：手機和電腦即時同步，離線也能改。
 
-### 完整安裝
+## 怎麼運作
 
-安裝是一支腳本，在終端機跑就好：
+```
+GitHub Actions（你自己的私有 repo，每小時一次，電腦不用開）
+  登入 e學苑和 gms 信箱 → 整理作業、課程、未讀信 → (選用) 替需注意的新信寫摘要
+                                   │
+你自己的 Firebase（Google 的免費資料庫）  ▼
+                                   │
+Android app、網頁版 betterel.web.app  ▼  登入後讀你自己的資料，離線時用上次的
+```
 
-1. 裝工具（PowerShell，一行一行貼；Mac 用 brew），裝完把視窗關掉重開：
+- **大家共用同一個 app 和網頁**，但資料各自放在自己的 Firebase。用安裝時產生的專屬連結或 QR code 登入，才會連到你的資料。別人，包括這個 repo 的作者，都看不到。
+- **同步程式在這個 repo 的 [`engine/`](engine/)**。你的私有 repo 引用它的 `v1` 版，爬蟲修好後所有人下一個整點就更新。
+
+## 安裝
+
+需要一個 GitHub 帳號和一個個人 Google 帳號（建 Firebase 用，不要用 gms），都免費。核心功能任何作業系統都能裝；講義下載只支援 Windows。
+
+1. **裝工具**。Windows 在 PowerShell 一行一行跑，Mac 用 `brew install git gh node python`。裝完把終端機關掉重開：
 
    ```powershell
    winget install Git.Git
@@ -27,149 +38,125 @@
    winget install Python.Python.3.12
    ```
 
-2. 這個頁面右上角綠色的 **Code → Download ZIP**，解壓縮。
-3. 在 PowerShell 跑（路徑換成你解壓縮的位置）：
+2. **下載這個 repo**：`git clone https://github.com/gtoki3177/BetterNDHUelearning.git`，或在這個頁面按 **Code → Download ZIP** 解壓縮。
+
+3. **跑安裝腳本**，照畫面做，大約 15 分鐘：
 
    ```powershell
-   python "$HOME\Downloads\BetterNDHUelearning-main\plugins\better-ndhu-elearning\skills\setup\files\install_full.py"
+   cd BetterNDHUelearning
+   python install.py
    ```
 
-   照畫面一步步做，大約 15 分鐘。中斷了再跑一次會接著做。Windows 最後會問要不要把講義下載到電腦，選要的話之後每天自動下載新講義，電腦版 app 點教材就會直接打開檔案。
+   腳本會依序做這些事。中途關掉沒關係，再跑一次會從停下的地方接著做（進度在 `~/BetterElearning/install-state.json`）：
 
-裝完之後，想要 app 的「立即同步」按鈕、讓 Claude 替重要的信寫摘要、或下載講義到電腦，再跟 Claude 說「BetterElearning 的選用設定」。
+   1. 檢查工具，登入 GitHub 和 Firebase。
+   2. 問學號、系所、要不要同步信箱、登入 app 用的 email。
+   3. 建你自己的 Firebase 專案和資料庫。
+   4. 請你在 Firebase 網頁上點兩個地方：開一個登入帳號、下載金鑰。腳本會印出網址等你。
+   5. 建你自己的私有同步 repo `betterel-sync`，請你輸入 e學苑密碼（和信箱的應用程式密碼）。密碼直接交給 GitHub 加密保存，不會寫進任何檔案。
+   6. 跑第一次同步，產生你的專屬連結和 QR code。
+   7. （Windows）問要不要把講義下載到這台電腦。
+   8. 問要不要設定信件摘要。
 
-Android app 在 [Releases](https://github.com/gtoki3177/BetterNDHUelearning/releases) 下載，之後畫面會自己熱更新。完整安裝的雲端同步程式在 [`engine/`](engine/)，大家的私有 repo 都引用它的 `v1` 版，修好爬蟲推上來、移動 `v1` 標籤，所有人下一個整點就更新。app 是大家共用的，設定時 Claude 會給你一個專屬 QR code，掃了才會連到你自己的資料；你的資料放在你自己的 Firebase，別人（包括這個 repo 的作者）看不到。
+4. **裝 app**：
+   - **Android**：到 [Releases](https://github.com/gtoki3177/BetterNDHUelearning/releases/latest) 下載 `BetterElearning.apk` 安裝，再用相機掃 QR code。
+   - **電腦、iPhone**：用 Chrome 或 Edge 開專屬連結（存在 `~/BetterElearning/setup-link.txt`），登入後網址列可以「安裝應用程式」。
 
----
+   登入用第 4 步在 Firebase 建的 email 和密碼，不是學校帳號。
 
-以下是**輕量安裝**的說明。
+### 信箱的應用程式密碼
 
-東華大學 e學苑（Moodle）和 gms 學校信箱的 Claude Cowork 外掛。自動整理成一個叫 **BetterElearning** 的儀表板，電腦開著時一天更新好幾次，手機也看得到：
+gms 是 Google 帳號，要用「應用程式密碼」才能讓程式讀信：
 
-- **任務**：待交作業倒數、三週日曆、作業詳情，可以依截止日 / 課程 / 最新加入排序、依繳交狀態篩選；超過三份會變成可以左右拖曳的一排。可以一鍵複製「開始做這份作業」的 Claude prompt，講義路徑已經帶進去。
-- **信箱**：未讀信自動分類（系上 / 課程 / 學校單位 / 校園公告 / 系統通知）。需要注意的信會由 Claude 寫好中文摘要、要做的事和期限（傍晚的排程會寫；新信你一打開儀表板，頁面也會自己補寫）。
-- **立即同步**：右上角的按鈕，按下去 Claude 會叫你電腦馬上同步一次再推上來，大約 1–2 分鐘。桌面版、瀏覽器、手機都能按。
-- **課程 / 教材**：每門課的活動和講義。講義都會下載到你電腦，建全文索引，直接問 Claude「哪堂課講過 deadlock」就找得到。
-- **推播**：作業 3 天內到期還沒交、有需要注意的新信、同步壞掉時，會推到手機。
+1. 用 gms 登入 <https://myaccount.google.com/security>，開啟「兩步驟驗證」。
+2. 到 <https://myaccount.google.com/apppasswords>，名稱隨便填，按建立，會出現 16 個英文字母。安裝腳本問的時候貼上。
 
-> 這不是學校官方的東西，也和學校沒有任何關係。它用你自己的帳號登入、只抓你自己的資料。
+## 選用功能
 
-## 需要什麼
+想加裝或改設定時，再跑一次 `python install.py`，做過的步驟會跳過。
 
-- **Windows 電腦**：同步程式用到 Windows 的密碼加密（DPAPI）和工作排程器。
-- **Python 3.10 以上**：到 [python.org](https://www.python.org/downloads/) 下載，安裝時勾「Add python.exe to PATH」。
-- **Claude 付費方案 + Claude 桌面版（Cowork）**：要能用排程任務，而且 Claude 要能連到你電腦上的資料夾。
-- **gms 帳號**。要同步信箱的話，還要開 Google 兩步驟驗證並產生應用程式密碼，設定時 Claude 會一步步帶你。
+### 講義下載和全文檢索（Windows）
 
-## 安裝
+每門課的講義會下載到你選的資料夾、建全文索引，之後每天第一次開機自動下載新的。電腦版 app 點教材會直接開檔，教材分頁會顯示索引統計。全文搜尋用 `_moodle` 資料夾裡的 `search.py`。
 
-1. 在 Cowork 的外掛設定新增市集（marketplace），填這個 repo：`gtoki3177/BetterNDHUelearning`。
-2. 從市集安裝 **better-ndhu-elearning**。
-3. 在 Claude 桌面版連上你要放課程資料的資料夾，例如「大四」，然後跟 Claude 說：
+- 作業、繳交狀態、行事曆一律由雲端同步負責，電腦每天只登入 e學苑一次，只為了下載講義。
+- **點教材直接開檔**：安裝時會問要不要登記 `betterel:` 連結。它只開課程資料夾裡的文件（pdf、ppt、doc、xls、txt…），zip 和資料夾用檔案總管打開，其他檔案一律不執行。移除：在 `_moodle` 跑 `powershell -ExecutionPolicy Bypass -File .\install_open_local.ps1 -Uninstall`。
 
-   > 幫我設定 BetterNDHUelearning
+### 信件摘要
 
-Claude 會問你學號、系所、要不要同步信箱，把程式放進資料夾，再告訴你要在 PowerShell 貼哪幾行（裝套件、設密碼、跑第一次同步）。跑完它會建好儀表板，並設定自動更新的排程。
+需注意的新信可以交給語言模型，寫成 1–3 句中文摘要、一句「要做的事＋期限」和 2–3 個幻燈片短句。沒設的話，app 會用信裡抓到的關鍵字。
 
-## 怎麼運作
+| 方式 | 在哪裡跑 | 需要 |
+|---|---|---|
+| 雲端 API | GitHub 每小時同步完順便寫，電腦不用開 | OpenAI、Gemini、OpenRouter、Anthropic 或其他 OpenAI 相容服務的 API 金鑰，依用量付費 |
+| 本地模型 | 你的電腦，跟講義下載同一個排程 | Ollama 或 LM Studio，電腦開著才會寫 |
+| 指令列 agent | 同上 | 任何從 stdin 讀提示詞、把結果印到 stdout 的指令，例如 `codex exec -`、`claude -p`、`ollama run <模型>` |
 
-```
-你的電腦 (Windows 工作排程器，開機登入時 + 定時)
-  mail_sync.py   每 10 分鐘  IMAP 讀 gms 信箱，只下載新信    → mail.json      (幾秒)
-  moodle_sync.py 每 30 分鐘  看作業、繳交狀態、期限          → latest.json    (十幾秒)
-                 每天第一次  另外下載新講義、建全文索引                        (幾十秒)
-                 內容沒變就不重寫檔案
-                                     │
-Claude 排程「BetterElearning 更新」  ▼  (6:20 / 10:20 / 14:20 / 18:20 / 22:20)
-  連到你電腦讀 latest.json / mail.json → 有變才寫進儀表板的頁面資料庫
-  18:20 那次另外替需注意的信寫摘要、必要時推播
-  「立即同步」按鈕也是觸發它：先叫你電腦同步，再推上來
-                                     │
-BetterElearning 儀表板               ▼
-  從頁面資料庫讀資料，開著時資料一寫進去就自己更新
-  需注意的新信還沒摘要的話，頁面會用你的 Claude 額度補寫，存回資料庫
-```
+- 安裝腳本的最後一步會帶你設定。
+- **雲端 API** 的設定是同步 repo 的四個 secrets：`SUMMARY_MODEL`、`SUMMARY_API_KEY`、`SUMMARY_PROVIDER`（`openai` 或 `anthropic`）、`SUMMARY_BASE_URL`。
+- **本地模型和 agent** 的設定在 `_moodle\config.ini` 的 `[summaries]` 段落，說明在 `config.example.ini`。金鑰放環境變數 `SUMMARY_API_KEY`，不寫進設定檔。
+- 試跑（只印出結果、不存）：
 
-抓資料全部在你自己的電腦上跑，原因有兩個：
+  ```powershell
+  python summaries.py auto --config config.ini --dry-run
+  ```
 
-- e學苑的 Moodle web service 是關的，拿不到 API token，只能模擬一般登入。
-- Claude 的雲端環境連不到 `*.ndhu.edu.tw`。
+- 交給 agent 時，請用不能改檔案、不能執行指令的唯讀模式。信件內容是外人寫的，程式會提醒模型把它當資料，但沒辦法保證。
+- 也可以用 `need` 和 `write` 兩個指令自己接任何 agent 流程：`need` 印出要寫的信，寫好的 JSON 交給 `write` 存回去。格式寫在 `summaries.py` 開頭。
 
-所以 Claude 要推資料時，**你的電腦要開著、登入，而且 Claude 桌面版要開著**。電腦關著時儀表板照樣打得開，只是停在最後一次推上去的資料；下次開機後本機會先補同步，下一輪排程（或你按「立即同步」）就推上去。
+### 立即同步
 
-### 資料放在哪
+app 選單裡的「立即同步」會叫 GitHub 馬上跑一次同步，大約 1–2 分鐘。它需要一組只能觸發你同步 repo 的 GitHub token：
 
-| 位置 | 內容 |
-|---|---|
-| 你電腦的 `_moodle` 資料夾 | `latest.json`、`mail.json`（最近 14 天的信，含內文前 1200 字）、`state.db`（講義索引）、`status_*.json`（上次同步結果）、log |
-| 你電腦的 `<科目>\教材` | 下載下來的講義 |
-| 頁面資料庫（claude.ai 上，跟著儀表板） | `dashboard/data`（課程、作業）、`dashboard/mail`（只有未讀信、開頭 260 字和摘要）、`dashboard/settings`（上次推送的時間和結果） |
+1. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token。
+2. Repository access 只選 `betterel-sync`；Permissions 把 **Actions** 設成 Read and write；到期日最長一年。
+3. 在 app 的「設定」頁填 repo（`<你的帳號>/betterel-sync`）和 token。手機設好，電腦也能用。
 
-## 隱私：什麼會交給 Claude、什麼不會
+## 更新
 
-| 不會離開你電腦 | 會給 Claude 讀 |
-|---|---|
-| e學苑密碼、Gmail 應用程式密碼（Windows DPAPI 加密，換帳號或換電腦都解不開） | `latest.json`：課程、作業、教材清單、同步時間 |
-| 講義檔案本身（除非你叫 Claude 去讀） | `mail.json`：最近 14 天信件的寄件者、主旨、內文前 1200 字（排程在你電腦上讀；進頁面資料庫的只有未讀信的開頭 260 字） |
+- **同步程式**：自動。你的同步 repo 引用 `engine-sync.yml@v1`，維護者把 `v1` 標籤移到新版後，下一個整點就生效。
+- **app**：畫面自己熱更新。選單出現「有新版 app」時，到 Releases 下載覆蓋安裝，資料和登入都會保留。
+- **網頁版**：重新整理就是新版。
+- **電腦上的程式**（講義下載、信件摘要）：下載新版的這個 repo，把 `plugins/better-ndhu-elearning/skills/setup/files/` 裡的 `.py`、`.ps1` 複製到 `_moodle`，`cloud-template/cloud/` 裡的 `summaries.py`、`cloud_push.py` 也一樣。不要蓋掉 `config.ini`。
 
-儀表板是你 claude.ai 帳號下的私人頁面，除非你自己分享，不然別人看不到。資料放在頁面自己的資料庫裡，只有你（和替你跑排程的 Claude）寫得進去；分享出去的人只能看。
+## 隱私
 
-不想讓某些信給 Claude 讀，有兩種做法：
-
-- 把寄件者加進 `config.ini` 的 `skip_senders`。
-- 把 `include_body` 設成 `false`，就只給寄件者和主旨。
-
-## 點教材直接開檔（選用）
-
-網頁本身不能開你電腦上的檔案，所以這個功能要執行 `install_open_local.ps1`：它會在 Windows 登記一種 `betterel:` 連結，點了就交給 `open_local.ps1` 處理。
-
-- **開得了什麼**：只開你課程資料夾裡的文件檔（pdf / ppt / pptx / doc / docx / xls / xlsx / txt / md / csv），zip 和資料夾會在檔案總管打開。
-- **exe 等其他檔案**：只會在檔案總管裡標出來，一律不執行。
-- **在哪裡能用**：只在 Chrome / Edge 開儀表板時有效。Claude 桌面版裡點了只會複製路徑。
-- **移除**：`powershell -ExecutionPolicy Bypass -File .\install_open_local.ps1 -Uninstall`
-
-## 立即同步和 betterel
-
-「立即同步」要在 `_moodle` 執行過 `install_mcp.ps1`（先完全關掉 Claude 桌面版）：它把 `betterel_mcp.py` 註冊成桌面版的本機 MCP server。排程裡的 Claude 透過它叫你電腦跑同步腳本。
-
-- `betterel` 能做三件事：讀同步結果、讀指定未讀信的內文、在背景啟動 `moodle_sync.py` / `mail_sync.py`。不接受其他指令，不碰密碼檔。
-- 按鈕背後是觸發「BetterElearning 更新」排程，每按一次會用掉一次 Claude 排程的額度。
-- 頁面裡還留著「桌面版直接讀 betterel、每 2 分鐘更新」的程式，但現在平台不讓頁面宣告本機 MCP server 的權限，所以沒有作用；平台開放後補宣告就能用。
-- 移除：`powershell -ExecutionPolicy Bypass -File .\install_mcp.ps1 -Remove`
-
-## 更新外掛
-
-這個 repo 更新後，在 Cowork 的外掛設定更新 **better-ndhu-elearning**：
-
-- **儀表板**：不用做任何事。下一次每日更新時，Claude 發現外掛裡的範本比你的頁面新，會自動換成新版，作業、信件摘要這些資料都會保留。（從 0.2 以前升上來的頁面，這次會順便開好頁面資料庫，之後每天只更新資料、不再重新發佈頁面。）
-- **電腦上的程式**（`_moodle` 裡的 `.py` / `.ps1`）：跟 Claude 說「更新 BetterNDHUelearning 的程式」，它會只換程式檔，不動你的 `config.ini` 和資料。
-- **從 0.3 升到 0.4**：換完程式後要重跑 `install_task.ps1`、`install_mail_task.ps1`（換成新的同步頻率）和 `install_mcp.ps1`（betterel 多了工具，跑完重開桌面版），再請 Claude 把 Claude 排程改成「BetterElearning 更新」那套（見 setup 技能第 6 步）。
+| 東西 | 放在哪 | 誰看得到 |
+|---|---|---|
+| e學苑密碼、信箱應用程式密碼 | 你同步 repo 的 GitHub Secrets（加密）；有下載講義的話，另一份用 Windows DPAPI 加密存在你電腦 | 只有 GitHub Actions 執行時讀得到 |
+| 作業、課程、最近 14 天的信 | 你自己的 Firebase | 只有你的登入帳號 |
+| Firebase 金鑰 `firebase-sa.json` | `~/BetterElearning/`、你的同步 repo secrets | 不要傳給任何人 |
+| 信件摘要 | 需注意的信的寄件者、主旨、內文前 1500 字會送到你選的模型 | 你選的服務商（本地模型則不離開你電腦） |
 
 ## 常見問題
 
-- **登入失敗**：確認 `config.ini` 的 `username` 是學號。改過 gms 密碼的話，要重跑 `python set_password.py`。
-- **排程有沒有在跑**：在 `_moodle` 資料夾執行 `powershell -ExecutionPolicy Bypass -File .\check_task.ps1`。
-- **手動同步一次**：按儀表板的「立即同步」，或在 `_moodle` 跑 `python moodle_sync.py --force`（完整）/ `--light`（只看作業）。
-- **按了立即同步但沒反應**：看儀表板「系統」分頁最後一行的結果。寫「電腦沒開」就是 Claude 連不到你電腦（桌面版沒開或電腦睡了）；寫權限錯誤的話，到 Claude 桌面版的排程設定確認排程能用你的課程資料夾。
+- **e學苑登入失敗**：學號或密碼打錯。刪掉 `install-state.json` 裡的 `"pw_moodle"` 那行再跑一次 `install.py`。學校密碼改了：`gh secret set MOODLE_PASSWORD --repo <你的帳號>/betterel-sync`。
+- **信箱出現 `Application-specific password required`**：存成一般密碼了，要用 16 碼應用程式密碼。刪掉 `"pw_mail"` 那行再跑一次。
+- **同步失敗**：到 `https://github.com/<你的帳號>/betterel-sync/actions` 看最近一次的紀錄，或跑 `gh run view --repo <你的帳號>/betterel-sync --log-failed`。
+- **講義下載有錯**：看 `<課程資料夾>\_moodle\log.txt` 最後幾行。排程有沒有在跑：在 `_moodle` 跑 `check_task.ps1`。
 - **不想同步某些課**：`config.ini` 的 `skip_courses` 填課號，用逗號分隔。
-- **學校改了 e學苑版面導致抓不到**：看 `latest.json` 的 `errors`，歡迎開 issue 或送 PR。
+- **學校改了 e學苑版面導致抓不到**：歡迎開 issue 或送 PR。
 
 ## 請客氣一點
 
-每個請求之間預設停 0.6 秒。每 30 分鐘的輕量同步大約只有十來個請求，下載講義的完整同步一天只跑一次。請不要把 `request_delay` 調小、也不要把排程改得更密，別把學校伺服器當沙包。也請遵守學校的資訊使用規範。
+每個請求之間預設停 0.6 秒，雲端每小時同步一次，講義一天只下載一次。請不要把 `request_delay` 調小、也不要把排程改得更密，別把學校伺服器當沙包。也請遵守學校的資訊使用規範。
+
+## 其他裝法
+
+用 Claude 付費方案的話，另有一種只在 Claude 裡看儀表板、電腦開著才更新的輕量版，見 [docs/lite.md](docs/lite.md)。
 
 ## 開發
 
 ```
+install.py                 安裝腳本的入口 (呼叫 files/install_full.py)
+engine/                    雲端同步程式；.github/workflows/engine-sync.yml 是大家的同步 repo 呼叫的 reusable workflow
 plugins/better-ndhu-elearning/
-  skills/setup/            安裝流程：SKILL.md 是完整安裝、LITE.md 是輕量安裝
-                           cloud-template/ 是完整安裝時推到使用者私有 repo 的同步引擎 (GitHub Actions + Firestore)
-                           files/ 是會被複製到使用者 _moodle 資料夾的程式；files/setup_link.py 產生 app 的設定連結 / QR code
-  skills/daily-update/     儀表板更新流程 (完整 / 快速模式)；scripts/build.py 產生儀表板；assets/dashboard.html 是範本
-                           (改了範本記得調高裡面的 TEMPLATE_VERSION，使用者的頁面才會自動升級)
-  skills/search-materials/ 講義全文檢索
+  skills/setup/files/      安裝腳本和電腦端程式 (講義下載、全文檢索、排程)
+  skills/setup/cloud-template/
+                           安裝時推到使用者私有 repo 的內容；cloud/summaries.py 是信件摘要
+  skills/                  Claude 外掛 (輕量版和選用設定用)
 ```
 
-改信件分類規則時，`dashboard.html` 的 JS、`build.py`、`daily-update/SKILL.md` 三個地方要一起改。
+App 和網頁版的原始碼在另一個 repo。
 
 MIT License。

@@ -7,6 +7,7 @@
 |---|---|
 | `moodle_sync.py`、`mail_sync.py` | 同步程式（跟電腦版同一份，密碼改從環境變數讀、e學苑 session 可沿用） |
 | `cloud_push.py` | 同步前從 Firestore 取回上一版、同步後寫回 |
+| `summaries.py` | 選用：使用者設了 `SUMMARY_MODEL` 等 secrets 時，同步完用 API 替需注意的新信寫摘要（OpenAI 相容 / Anthropic / 指令列） |
 | `config.cloud.ini` | 設定範本，workflow 會把帳號和系所填進去 |
 
 ## 版本

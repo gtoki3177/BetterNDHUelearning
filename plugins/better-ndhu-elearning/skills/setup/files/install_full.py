@@ -3,7 +3,8 @@
     python install_full.py
 
 會做的事：檢查工具 → 登入 GitHub / Firebase → 建你自己的 Firebase 專案 → 建你自己的私有同步 repo、
-設好帳密 → 跑第一次同步 → 產生 app 的專屬 QR code → (Windows) 把講義下載到這台電腦、之後每天自動下載。中途關掉沒關係，再跑一次會從上次停下的地方接著做
+設好帳密 → 跑第一次同步 → 產生 app 的專屬 QR code → (Windows) 把講義下載到這台電腦、之後每天自動下載
+→ (選用) 信件摘要：雲端 API、本地模型或電腦上的 agent。中途關掉沒關係，再跑一次會從上次停下的地方接著做
 （進度記在 ~/BetterElearning/install-state.json）。
 
 需要：git、GitHub CLI (gh)、Node.js、Python 3.9+。密碼只會在這個視窗裡輸入，直接交給 GitHub 加密保存。
@@ -361,7 +362,7 @@ def pc_materials(st):
     if st.get("pc_skip") and not yes("  上次選了不下載。現在要下載嗎？", False):
         return
     say("  每門課的講義會下載到你選的資料夾、建全文索引，之後每天自動下載新的；")
-    say("  電腦版 app 點教材就會直接打開檔案，也可以問 Claude「哪堂課講過 deadlock」。")
+    say("  電腦版 app 點教材就會直接打開檔案，也可以用 search.py 全文搜尋「哪堂課講過 deadlock」。")
     say("  第一次下載視講義多寡要幾分鐘，檔案可能不小。電腦要開著才會每天下載。")
     if not yes("  要下載嗎？"):
         st["pc_skip"] = True
@@ -435,6 +436,121 @@ def pc_materials(st):
     say(f"  講義在 {root}，每天第一次開機後會自動下載新的。")
 
 
+# ------------------------------------------------------------------ 信件摘要 (選用)
+CLOUD_PRESETS = [   # (名稱, provider, base_url)
+    ("OpenAI", "openai", "https://api.openai.com/v1"),
+    ("Google Gemini", "openai", "https://generativelanguage.googleapis.com/v1beta/openai"),
+    ("OpenRouter", "openai", "https://openrouter.ai/api/v1"),
+    ("Anthropic (Claude)", "anthropic", ""),
+    ("其他 OpenAI 相容的服務", "openai", None),
+]
+PC_PRESETS = [
+    ("Ollama（本地模型）", "openai", "http://localhost:11434/v1"),
+    ("LM Studio（本地模型）", "openai", "http://localhost:1234/v1"),
+    ("雲端 API（OpenAI 相容：OpenAI、Gemini、OpenRouter…）", "openai", None),
+    ("Anthropic API (Claude)", "anthropic", ""),
+    ("指令列 agent（codex、claude…，或任何讀 stdin、印出結果的指令）", "command", ""),
+]
+SUMM_SECRETS = ("SUMMARY_PROVIDER", "SUMMARY_BASE_URL", "SUMMARY_MODEL", "SUMMARY_API_KEY")
+
+
+def pick(options):
+    for i, o in enumerate(options, 1):
+        say(f"    {i}. {o[0]}")
+    return options[int(ask("  選哪個", "1", check=lambda v: v.isdigit() and 1 <= int(v) <= len(options))) - 1]
+
+
+def ask_model(provider):
+    if provider == "anthropic":
+        return ask("  模型名稱", "claude-opus-5-5")
+    return ask("  模型名稱（照服務商或本地模型的名稱填，例如 Ollama 用 ollama list 看）")
+
+
+def pc_section(cfgp, body):
+    """把 config.ini 的 [summaries] 換成 body (None = 拿掉)。"""
+    t = cfgp.read_text(encoding="utf-8-sig")
+    t = re.sub(r"(?ms)^\[summaries\][ \t]*\n.*?(?=^\[|\Z)", "", t).rstrip("\n") + "\n"
+    if body:
+        t += "\n[summaries]\n" + body
+    cfgp.write_text(t, encoding="utf-8")
+
+
+def summaries_setup(st):
+    step(10, "信件摘要（選用）")
+    pc = os.name == "nt" and st.get("pc_done")
+    if st.get("summ_mode") and not yes(f"  已經設定過（{st['summ_mode']}）。要重新設定嗎？", False):
+        return
+    say("  需注意的新信可以交給語言模型寫中文摘要、要做的事和幻燈片短句；不設的話 app 會用信裡抓到的關鍵字。")
+    modes = [("不用", "none"), ("雲端 API：GitHub 每小時同步完順便寫，電腦不用開。要 API 金鑰，依用量付費。", "cloud")]
+    if pc:
+        modes.append(("這台電腦：本地模型（Ollama、LM Studio）或電腦上的 agent 指令，電腦開著才會寫。", "pc"))
+    else:
+        say("  （要用本地模型或電腦上的 agent，先在第 9 步選下載講義。）")
+    mode = pick(modes)[1]
+    repo, md = st["repo"], Path(st.get("pc_root") or ".") / "_moodle"
+    cfgp = md / "config.ini"
+
+    # 換方式時先清掉舊的設定，避免兩邊都在寫
+    if st.get("summ_mode") == "cloud" and mode != "cloud":
+        for k in SUMM_SECRETS:
+            run(["gh", "secret", "delete", k, "--repo", repo], check=False)
+    if st.get("summ_mode") == "pc" and mode != "pc" and cfgp.exists():
+        pc_section(cfgp, None)
+        ps(md / "install_task.ps1", md)
+
+    if mode == "cloud":
+        say("  用哪一家：")
+        name, provider, base = pick(CLOUD_PRESETS)
+        if base is None:
+            base = ask("  API 網址（到 /v1 為止，例如 https://api.example.com/v1）", check=lambda v: v.startswith("http"))
+        model = ask_model(provider)
+        for k, v in (("SUMMARY_PROVIDER", provider), ("SUMMARY_BASE_URL", base), ("SUMMARY_MODEL", model)):
+            if v:
+                run(["gh", "secret", "set", k, "--repo", repo, "--body", v])
+        say(f"\n  接下來輸入 {name} 的 API 金鑰。畫面上不會顯示你打的字，打完按 Enter。金鑰直接交給 GitHub 加密保存。")
+        run(["gh", "secret", "set", "SUMMARY_API_KEY", "--repo", repo], capture=False)
+        say("  好了。下一次整點同步完就會開始寫摘要；結果在 GitHub Actions 那次執行的「Mail summaries」步驟。")
+
+    elif mode == "pc":
+        say("  用什麼寫：")
+        name, provider, base = pick(PC_PRESETS)
+        lines = [f"provider = {provider}"]
+        if provider == "command":
+            say("  信件內容會從 stdin 交給這個指令，它要把 JSON 結果印出來。agent 請用不能改檔案、不能執行指令的唯讀模式。")
+            lines.append("command = " + ask("  指令（例如 codex exec -、claude -p、ollama run <模型>）"))
+        else:
+            if base is None:
+                base = ask("  API 網址（到 /v1 為止）", check=lambda v: v.startswith("http"))
+            if base:
+                lines.append(f"base_url = {base}")
+            lines.append(f"model = {ask_model(provider)}")
+            if provider == "openai" and "localhost" in base:
+                lines.append("batch = 2")
+            elif yes("  這個服務要 API 金鑰嗎？", True):
+                import getpass
+                import winreg
+                key = getpass.getpass("  輸入金鑰（畫面不會顯示）：").strip()
+                if key:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE) as h:
+                        winreg.SetValueEx(h, "SUMMARY_API_KEY", 0, winreg.REG_SZ, key)
+                    os.environ["SUMMARY_API_KEY"] = key
+                    say("  金鑰存在這個 Windows 帳號的環境變數 SUMMARY_API_KEY，沒有寫進任何檔案。")
+        if provider == "anthropic":
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "anthropic"], check=False)
+        shutil.copyfile(TEMPLATE / "cloud" / "summaries.py", md / "summaries.py")
+        shutil.copyfile(TEMPLATE / "cloud" / "cloud_push.py", md / "cloud_push.py")
+        shutil.copyfile(HERE / "install_task.ps1", md / "install_task.ps1")     # 舊版的排程腳本不認得 [summaries]
+        pc_section(cfgp, "\n".join(lines) + "\n")
+        say("\n  試跑一次（只印結果、不存）…")
+        subprocess.run([sys.executable, str(md / "summaries.py"), "auto", "--config", str(cfgp), "--dry-run"], cwd=str(md))
+        say("\n  把寫摘要加進每天的排程…")
+        ps(md / "install_task.ps1", md)
+        say(f"  好了。電腦開著時排程會順便寫摘要，紀錄在 {md / 'summaries_log.txt'}。")
+
+    st["summ_mode"] = mode
+    save_state(st)
+
+
 def main():
     say("BetterElearning 完整安裝")
     say(f"檔案會放在 {WORK}")
@@ -451,18 +567,20 @@ def main():
             first_sync(st)
         link_app(st)
         pc_materials(st)
+        summaries_setup(st)
     except KeyboardInterrupt:
         say("\n已中斷。再跑一次會從這裡接著做。")
         sys.exit(1)
     except Exception as e:  # noqa: BLE001
         say(f"\n出錯了：{e}")
-        say("再跑一次會從這一步接著做。卡住的話，把上面的訊息給 Claude 看。")
+        say("再跑一次會從這一步接著做。卡住的話，帶著上面的訊息到 GitHub 開 issue。")
         sys.exit(1)
     say("\n完成！")
     say(f"- {WORK} 裡的 firebase-sa.json 不要傳給任何人。學校密碼改了：gh secret set MOODLE_PASSWORD --repo {st['repo']}")
-    say("- 想讓 app 有「立即同步」按鈕、或讓 Claude 替重要的信寫摘要：在 Claude 桌面版說「BetterElearning 的選用設定」。")
+    say("- app 的「立即同步」按鈕要一組 GitHub token，做法在 README 的〈立即同步〉。")
     if st.get("pc_done"):
         say(f"- 講義在 {st['pc_root']}。排程有沒有在跑：在那裡的 _moodle 資料夾執行 check_task.ps1。")
+    say("- 想改信件摘要的設定或加裝講義下載：再跑一次這支腳本。")
 
 
 if __name__ == "__main__":

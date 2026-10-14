@@ -105,6 +105,14 @@ if (Test-Path $push) {
         -Argument ('"{0}" overlay --dir "{1}" --config "{2}"' -f $push, $here, (Join-Path $here 'config.ini'))
     Write-Host '同步完會接著把教材路徑補進 BetterElearning app (cloud_push.py)' -ForegroundColor DarkGray
 }
+# config.ini 有 [summaries] (用 API、本地模型或 agent 寫信件摘要) 的話: 再加一個動作，替需注意的新信寫摘要
+$summ = Join-Path $here 'summaries.py'
+$cfg  = Join-Path $here 'config.ini'
+if ((Test-Path $summ) -and (Test-Path $cfg) -and (Select-String -LiteralPath $cfg -Pattern '^\s*\[summaries\]' -Quiet)) {
+    $actions += New-ScheduledTaskAction -Execute $exe -WorkingDirectory $here `
+        -Argument ('"{0}" auto --config "{1}"' -f $summ, $cfg)
+    Write-Host '也會替需注意的新信寫摘要 (summaries.py，記錄在 summaries_log.txt)' -ForegroundColor DarkGray
+}
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
     -MultipleInstances IgnoreNew `
