@@ -256,7 +256,10 @@ def github_repo(st):
     login = run(["gh", "api", "user", "-q", ".login"]).stdout.strip()
     repo = f"{login}/{REPO_NAME}"
     local = WORK / REPO_NAME
-    if run(["gh", "repo", "view", repo], check=False).returncode != 0:
+    exists = run(["gh", "repo", "view", repo], check=False).returncode == 0
+    # 上次建好 repo 但推送失敗的話，repo 會是空的：看裡面有沒有同步設定檔，沒有就補推
+    filled = exists and run(["gh", "api", f"repos/{repo}/contents/.github/workflows/sync.yml"], check=False).returncode == 0
+    if not filled:
         if local.exists():
             shutil.rmtree(local)
         shutil.copytree(TEMPLATE, local)
@@ -265,7 +268,12 @@ def github_repo(st):
         run(["git", "init", "-q", "-b", "main"], cwd=str(local))
         run(["git", "add", "-A"], cwd=str(local))
         run(git + ["commit", "-q", "-m", "BetterElearning 同步引擎"], cwd=str(local))
-        run(["gh", "repo", "create", REPO_NAME, "--private", "--source", ".", "--push"], cwd=str(local))
+        run(["gh", "auth", "setup-git"], check=False)        # 讓 git push 用 gh 的登入，不會另外跳出帳密
+        if exists:
+            run(["git", "remote", "add", "origin", f"https://github.com/{repo}.git"], cwd=str(local))
+            run(["git", "push", "-q", "-u", "origin", "main"], cwd=str(local))
+        else:
+            run(["gh", "repo", "create", REPO_NAME, "--private", "--source", ".", "--push"], cwd=str(local))
     st["repo"] = repo
     save_state(st)
     say(f"  repo：https://github.com/{repo}")
@@ -597,8 +605,15 @@ def check():
     say("BetterElearning 檢查")
     st = load_state()
     repo, sa_path, cfg_path = st.get("repo"), WORK / "firebase-sa.json", WORK / "firebase-config.json"
-    if not repo or not sa_path.exists():
-        say(f"  找不到安裝紀錄或金鑰（{STATE_FILE}、{sa_path}）。請在當初跑安裝的那台電腦、同一個帳號執行。")
+    if not STATE_FILE.exists():
+        say(f"  找不到安裝紀錄（{STATE_FILE}）。請在當初跑安裝的那台電腦、同一個 Windows 帳號執行；沒裝過的話跑 python install.py。")
+        return
+    if not sa_path.exists():
+        say("  安裝還沒做到第 5 步（下載 Firebase 金鑰）。跑 python install.py 會從那裡接著做。")
+        return
+    if not repo:
+        say("  安裝還沒做到第 6 步（建同步 repo），所以雲端從來沒有同步過，app 才會是空的。")
+        say("  跑 python install.py 會從那裡接著做；再卡住的話，把畫面上的錯誤訊息整段傳過來。")
         return
     problems = []
 
