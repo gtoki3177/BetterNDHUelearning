@@ -433,10 +433,16 @@ def link_app(st):
         import qrcode  # noqa: F401
     except ImportError:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--user", "qrcode"], check=False)
+    # 子程式一律用 UTF-8 輸出：中文 Windows 預設是 cp950，用 UTF-8 讀會在背景執行緒噴 UnicodeDecodeError
     r = subprocess.run([sys.executable, str(HERE / "setup_link.py"), str(WORK / "firebase-config.json"),
                         "--email", st["profile"]["email"], "--qr", str(WORK / "setup-qr.svg")],
-                       capture_output=True, text=True, encoding="utf-8")
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     link = r.stdout.strip()
+    if not link:
+        raise RuntimeError("產生 app 連結失敗：" + (r.stderr or "").strip()[-500:])
+    if not (WORK / "setup-qr.svg").exists():
+        say("  （QR code 沒產生成功：" + (r.stderr or "").strip()[-200:] + "。用下面的連結也可以。）")
     (WORK / "setup-link.txt").write_text(link + "\n", encoding="utf-8")
     say(f"  手機（Android）：先到 {APK} 下載 BetterElearning.apk 安裝，")
     say("        再用相機掃剛打開的 QR code，會直接開 app、停在登入畫面。")
