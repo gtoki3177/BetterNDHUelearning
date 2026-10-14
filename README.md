@@ -57,6 +57,7 @@ Android app、網頁版 betterel.web.app  ▼  登入後讀你自己的資料，
    6. 跑第一次同步，產生你的專屬連結和 QR code。
    7. （Windows）問要不要把講義下載到這台電腦。
    8. 問要不要設定信件摘要。
+   9. 問要不要設定 app 的「立即同步」按鈕。
 
 4. **裝 app**：
    - **Android**：到 [Releases](https://github.com/gtoki3177/BetterNDHUelearning/releases/latest) 下載 `BetterElearning.apk` 安裝，再用相機掃 QR code。
@@ -107,7 +108,11 @@ gms 是 Google 帳號，要用「應用程式密碼」才能讓程式讀信：
 
 ### 立即同步
 
-app 選單裡的「立即同步」會叫 GitHub 馬上跑一次同步，大約 1–2 分鐘。它需要一組只能觸發你同步 repo 的 GitHub token：
+app 選單裡的「立即同步」會叫 GitHub 馬上跑一次同步，大約 1–2 分鐘；同步失敗的話，app 會直接說卡在哪一步。它需要一組只能觸發你同步 repo 的 GitHub token。
+
+安裝腳本的最後一步會帶你做：它打開 GitHub 建 token 的網頁，名稱、權限、到期日都已經填好，你只要在「Repository access」選 **Only select repositories** → `betterel-sync`，按 Generate token，再把 token 貼回終端機。腳本會檢查 token 看不看得到你的同步 repo，再直接存進 app。token 一年後到期，到時候再跑一次 `python install.py`。
+
+手動設定的做法：
 
 1. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token。
 2. Repository access 只選 `betterel-sync`；Permissions 把 **Actions** 設成 Read and write；到期日最長一年。

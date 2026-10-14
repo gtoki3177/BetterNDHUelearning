@@ -567,6 +567,57 @@ def summaries_setup(st):
     save_state(st)
 
 
+# ------------------------------------------------------------------ 立即同步按鈕 (選用)
+def firestore_user(st):
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(credentials.Certificate(str(WORK / "firebase-sa.json")))
+    return firestore.client().collection("users").document(st["uid"])
+
+
+def dispatch_setup(st):
+    step(11, "app 的「立即同步」按鈕（選用）")
+    if st.get("dispatch_done") and not yes("  已經設定過了。要重新設定嗎？", False):
+        return
+    if not st.get("dispatch_done") and not yes("  要設定嗎？app 裡按一下就叫雲端馬上同步（不用等整點），需要一組只能觸發同步的 GitHub token"):
+        return
+    import getpass
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    repo = st["repo"]
+    owner, name = repo.split("/")
+    url = "https://github.com/settings/personal-access-tokens/new?" + urllib.parse.urlencode({
+        "name": "BetterElearning 立即同步", "description": f"只用來觸發 {repo} 的同步",
+        "target_name": owner, "expires_in": "366", "actions": "write"})
+    say("  等一下會打開 GitHub 建 token 的網頁，名稱、到期日（一年）、權限（Actions 讀寫）都已經填好了。你只要：")
+    say(f"    1. 「Repository access」選「Only select repositories」，再選 {name}。")
+    say("    2. 拉到最下面按「Generate token」，複製 github_pat_ 開頭的那一串。")
+    webbrowser.open(url)
+    while True:
+        token = getpass.getpass("  把 token 貼在這裡（畫面不會顯示，貼完按 Enter；直接 Enter 跳過）：").strip()
+        if not token:
+            return
+        req = urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/workflows/sync.yml",
+                                     headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
+        try:
+            urllib.request.urlopen(req, timeout=20).close()
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                say(f"  這個 token 看不到 {repo}：到 https://github.com/settings/personal-access-tokens 編輯它，Repository access 選 {name}，再貼一次。")
+            else:
+                say(f"  GitHub 不接受這個 token（HTTP {e.code}），確認整串都有複製到再貼一次。")
+        except OSError as e:
+            say(f"  連不到 GitHub（{e}），等一下再貼一次。")
+    firestore_user(st).collection("dash").document("settings").set(
+        {"dispatch": {"repo": repo, "workflow": "sync.yml", "ref": "main", "token": token}}, merge=True)
+    st["dispatch_done"] = True
+    save_state(st)
+    say("  好了。app 右上角（手機在選單裡）會出現「立即同步」；token 只存在你自己的 Firebase，一年後到期再重跑這一步。")
+
+
 def main():
     say("BetterElearning 完整安裝")
     say(f"檔案會放在 {WORK}")
@@ -584,6 +635,7 @@ def main():
         link_app(st)
         pc_materials(st)
         summaries_setup(st)
+        dispatch_setup(st)
     except KeyboardInterrupt:
         say("\n已中斷。再跑一次會從這裡接著做。")
         sys.exit(1)
@@ -593,7 +645,6 @@ def main():
         sys.exit(1)
     say("\n完成！")
     say(f"- {WORK} 裡的 firebase-sa.json 不要傳給任何人。學校密碼改了：gh secret set MOODLE_PASSWORD --repo {st['repo']}")
-    say("- app 的「立即同步」按鈕要一組 GitHub token，做法在 README 的〈立即同步〉。")
     if st.get("pc_done"):
         say(f"- 講義在 {st['pc_root']}。排程有沒有在跑：在那裡的 _moodle 資料夾執行 check_task.ps1。")
     say("- 想改信件摘要的設定或加裝講義下載：再跑一次這支腳本。")
