@@ -111,6 +111,7 @@ def build_data(L, prev, cfg):
     prev = prev or {}
     gen = tz(L.get("generated_at"))
     old_fs = {a["url"]: a.get("first_seen") for a in prev.get("assignments", [])}
+    old_att = {x["url"]: x["local"] for a in prev.get("assignments", []) for x in (a.get("attachments") or []) if x.get("local")}
     old_local = {i["url"]: i.get("local") for c in prev.get("courses", [])
                  for i in c.get("items", []) if i.get("local")}
     old_dept = {c["code"]: c.get("dept") for c in prev.get("courses", [])}
@@ -124,6 +125,9 @@ def build_data(L, prev, cfg):
             "url": a.get("url"), "submitted": bool(a.get("submitted")),
             "submission": a.get("submission"), "grading": a.get("grading"),
             "description": a.get("description") or "",
+            # 附件：雲端只有檔名和網址；電腦端下載過的帶本機路徑 (雲端重組時沿用上一版的)
+            "attachments": [{**x, **({"local": x.get("local") or old_att[x["url"]]} if x.get("local") or x.get("url") in old_att else {})}
+                            for x in (a.get("attachments") or []) if x.get("url")],
         })
 
     order = lambda k: 0 if k == "assign" else (2 if k == "forum" else 1)
@@ -280,6 +284,16 @@ def cmd_overlay(user, d, cfg_path):
     index = ({"files": st.get("indexed_files", 0), "chunks": st.get("indexed_chunks", 0), "courses": st.get("index") or []}
              if st.get("index") is not None else doc.get("index"))
     courses = doc.get("courses", [])
+    att_local = {x["url"]: x["local"] for a in L.get("assignments", []) for x in (a.get("attachments") or [])
+                 if x.get("local") and x.get("url")}
+    assigns = doc.get("assignments", [])
+    att_changed = 0
+    for a in assigns:
+        for x in a.get("attachments") or []:
+            lp = att_local.get(x.get("url"))
+            if lp and x.get("local") != lp:
+                x["local"] = lp
+                att_changed += 1
     changed = 0
     for c in courses:
         for it in c.get("items", []):
@@ -290,6 +304,8 @@ def cmd_overlay(user, d, cfg_path):
     patch = {}
     if changed:
         patch["courses"] = courses
+    if att_changed:
+        patch["assignments"] = assigns
     if doc.get("root") != root:
         patch["root"] = root
     if index is not None and doc.get("index") != index:

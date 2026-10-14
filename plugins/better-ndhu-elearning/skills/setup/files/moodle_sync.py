@@ -869,13 +869,19 @@ def run(mode="heavy"):
                     pass
             done = (info.get("submission") or "")
             rec["submitted"] = bool(re.search(r"已(繳交|送出)|Submitted", done))
+            # 作業說明的附件 (spec PDF 之類)：記下檔名和網址，app 的作業詳情列得出來
+            att_urls = list(dict.fromkeys(u for u in find_pluginfiles(ah)
+                                          if "mod_assign/intro" in u or "mod_assign/introattachment" in u))
+            rec["attachments"] = [{"name": filename_from_url(u), "url": u} for u in att_urls]
             entry["assignments"].append(rec)
             snapshot["assignments"].append(rec)
-            # 作業說明附檔 (spec PDF 之類) 收進 <科目>\作業\
+            # 下載到 <科目>\作業\，附件記上本機路徑 (電腦版 app 點了直接開檔，不用登入 e學苑)
             if do_download:
-                for u in find_pluginfiles(ah):
-                    if "mod_assign/intro" in u or "mod_assign/introattachment" in u:
-                        download_file(u, a["name"], folder, adir, entry)
+                for att in rec["attachments"]:
+                    download_file(att["url"], a["name"], folder, adir, entry)
+                    row = con.execute("SELECT local_path FROM files WHERE url=?", (att["url"].split("?")[0],)).fetchone()
+                    if row and Path(row[0]).exists():
+                        att["local"] = row[0]
 
         # ---- 教材 ----
         if do_download:
