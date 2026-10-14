@@ -215,6 +215,64 @@ def firebase_project(st):
         save_state(st)
 
 
+def download_dirs():
+    """瀏覽器可能把檔案存在的地方：Windows 設定裡真正的「下載」資料夾 (可能被搬到 D 槽或 OneDrive)、預設的下載、桌面。"""
+    dirs = []
+    if os.name == "nt":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as h:
+                dirs.append(Path(os.path.expandvars(winreg.QueryValueEx(h, "{374DE290-123F-4565-9164-39C4925E467B}")[0])))
+        except OSError:
+            pass
+    home = Path.home()
+    dirs += [home / "Downloads", home / "OneDrive" / "Downloads", home / "Desktop", home / "OneDrive" / "Desktop"]
+    out = []
+    for d in dirs:
+        if d.is_dir() and d.resolve() not in [x.resolve() for x in out]:
+            out.append(d)
+    return out
+
+
+def key_project(p):
+    """是 Firebase 服務帳戶金鑰就回傳它的專案 ID，不是就回傳 None。"""
+    try:
+        j = json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return j.get("project_id") if isinstance(j, dict) and j.get("type") == "service_account" else None
+
+
+def find_keys(dirs, since):
+    """這些資料夾裡最近下載的金鑰，新的在前：[(路徑, 專案 ID)]。"""
+    hits = []
+    for d in dirs:
+        for p in d.glob("*.json"):
+            try:
+                if p.stat().st_mtime < since:
+                    continue
+            except OSError:
+                continue
+            proj = key_project(p)
+            if proj:
+                hits.append((p, proj))
+    return sorted(hits, key=lambda h: h[0].stat().st_mtime, reverse=True)
+
+
+def wait_or_type(check, every=1.5):
+    """一直重試 check() 直到有結果；使用者開始打字 (或在非 Windows) 就停下來讓他輸入。"""
+    r = check()
+    if r or os.name != "nt" or not sys.stdin.isatty():    # 不是一般主控台的話偵測不到按鍵，直接讓他輸入
+        return r
+    import msvcrt
+    while not msvcrt.kbhit():
+        time.sleep(every)
+        r = check()
+        if r:
+            return r
+    return None
+
+
 def firebase_console(st):
     pid, email = st["project"], st["profile"]["email"]
     step(5, "在 Firebase 網頁上點兩個地方")
@@ -236,17 +294,33 @@ def firebase_console(st):
         say("      按「產生新的私密金鑰」→ 產生金鑰，瀏覽器會下載一個 .json 檔。")
         say("      這個檔等於整個資料庫的鑰匙，不要傳給任何人。")
         webbrowser.open(url)
-        downloads = Path.home() / "Downloads"
-        t0 = time.time() - 5
+        since = time.time() - 3600                          # 一小時內下載的才算，免得撿到很久以前別的專案的
+        dirs = download_dirs()
+        say("  下載好會自動抓到（找的地方：" + "、".join(str(d) for d in dirs) + "）。")
+        say("  沒抓到的話，把檔案拖進這個視窗（或貼上檔案路徑）再按 Enter。")
         while not sa.exists():
-            found = sorted((p for p in downloads.glob(f"{pid}-firebase-adminsdk-*.json") if p.stat().st_mtime > t0 - 3600),
-                           key=lambda p: p.stat().st_mtime, reverse=True) if downloads.exists() else []
-            if found:
-                shutil.move(str(found[0]), sa)
+            got = wait_or_type(lambda: [h for h in find_keys(dirs, since) if h[1] == pid])
+            if got:
+                shutil.move(str(got[0][0]), sa)
                 break
-            v = input(f"  下載好了按 Enter（自動在「下載」資料夾找）；或把檔案拖進這個視窗再按 Enter：").strip().strip('"')
-            if v and Path(v).is_file():
-                shutil.move(v, sa)
+            v = input("  檔案路徑：").strip().strip('"').strip("'")
+            if v:
+                p = Path(v)
+                proj = key_project(p) if p.is_file() else None
+                if not p.is_file():
+                    say("  找不到這個檔案，再確認一次路徑。")
+                elif proj is None:
+                    say("  這個檔案不是 Firebase 金鑰（.json，裡面寫著 service_account）。")
+                elif proj != pid:
+                    say(f"  這是別的專案（{proj}）的金鑰，要在 {pid} 這個專案下載。")
+                else:
+                    shutil.move(str(p), sa)
+            else:
+                other = find_keys(dirs, since)
+                if other:
+                    say(f"  找到的金鑰是別的專案（{other[0][1]}），要在 {pid} 這個專案下載：{url}")
+                else:
+                    say("  還沒找到金鑰檔。下載的是一個 .json 檔，檔名開頭是 " + pid + "-firebase-adminsdk；瀏覽器下載列可以看到它存在哪。")
         say(f"  金鑰放在 {sa}")
 
 
