@@ -130,6 +130,7 @@ app 選單裡的「立即同步」會叫 GitHub 馬上跑一次同步，大約 1
 
 ## 常見問題
 
+- **app 登入了但什麼資料都沒有**（右上角寫「雲端還沒有資料」）：在當初安裝的那台電腦、repo 資料夾裡跑 `python install.py --check`。它會列出最近幾次同步的結果、同步寫進哪個帳號、資料庫裡哪個帳號有資料，指出哪裡不對；最常見的是安裝時貼錯了 UID，它會問要不要直接改好。
 - **e學苑登入失敗**：學號或密碼打錯。刪掉 `install-state.json` 裡的 `"pw_moodle"` 那行再跑一次 `install.py`。學校密碼改了：`gh secret set MOODLE_PASSWORD --repo <你的帳號>/betterel-sync`。
 - **信箱出現 `Application-specific password required`**：存成一般密碼了，要用 16 碼應用程式密碼。刪掉 `"pw_mail"` 那行再跑一次。
 - **同步失敗**：到 `https://github.com/<你的帳號>/betterel-sync/actions` 看最近一次的紀錄，或跑 `gh run view --repo <你的帳號>/betterel-sync --log-failed`。

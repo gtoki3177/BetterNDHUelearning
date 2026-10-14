@@ -24,7 +24,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE.parent / "cloud-template"
-WORK = Path.home() / "BetterElearning"
+WORK = Path(os.environ.get("BETTEREL_WORK") or Path.home() / "BetterElearning")
 STATE_FILE = WORK / "install-state.json"
 FT = ["npx", "--yes", "firebase-tools@15"]
 REPO_NAME = "betterel-sync"
@@ -583,5 +583,90 @@ def main():
     say("- 想改信件摘要的設定或加裝講義下載：再跑一次這支腳本。")
 
 
+# ------------------------------------------------------------------ 檢查 (python install.py --check)
+def check():
+    """app 登入了卻沒資料時用：比對同步 repo、Firebase 專案、登入帳號的 UID 和資料庫裡實際有資料的帳號。"""
+    say("BetterElearning 檢查")
+    st = load_state()
+    repo, sa_path, cfg_path = st.get("repo"), WORK / "firebase-sa.json", WORK / "firebase-config.json"
+    if not repo or not sa_path.exists():
+        say(f"  找不到安裝紀錄或金鑰（{STATE_FILE}、{sa_path}）。請在當初跑安裝的那台電腦、同一個帳號執行。")
+        return
+    problems = []
+
+    # 1. 最近幾次同步
+    say("\n━━ 1. 最近幾次雲端同步")
+    r = run(["gh", "run", "list", "--repo", repo, "--workflow", "sync.yml", "--limit", "5",
+             "--json", "databaseId,status,conclusion,createdAt,event"], check=False)
+    runs = json.loads(r.stdout or "[]") if r.returncode == 0 else []
+    for x in runs:
+        say(f"  {x['createdAt'][:16].replace('T', ' ')} UTC  {x['event']:<17} {x['conclusion'] or x['status']}")
+    if not runs:
+        problems.append(("一次都沒有同步過", f"gh workflow run sync.yml --repo {repo}"))
+    elif not any(x["conclusion"] == "success" for x in runs):
+        problems.append(("最近的同步都沒有成功", f"gh run view {runs[0]['databaseId']} --repo {repo} --log-failed"))
+
+    # 2. 專案和 UID
+    say("\n━━ 2. Firebase 專案和帳號")
+    sa = json.loads(sa_path.read_text(encoding="utf-8"))
+    sa_proj = sa.get("project_id")
+    app_proj = json.loads(cfg_path.read_text(encoding="utf-8")).get("projectId") if cfg_path.exists() else None
+    say(f"  金鑰的專案：{sa_proj}　app 連的專案：{app_proj}")
+    if app_proj and sa_proj != app_proj:
+        problems.append(("金鑰和 app 屬於不同的 Firebase 專案：同步寫進一個專案，app 讀另一個",
+                         f"到 {CONSOLE.format(p=app_proj)}/settings/serviceaccounts/adminsdk 重新下載金鑰，"
+                         f"放到 {sa_path}，再在 PowerShell 執行：Get-Content \"{sa_path}\" -Raw | gh secret set FIREBASE_SA --repo {repo}"))
+    r = run(["gh", "variable", "list", "--repo", repo, "--json", "name,value"], check=False)
+    var_uid = next((v["value"] for v in json.loads(r.stdout or "[]") if v["name"] == "FIREBASE_UID"), None) if r.returncode == 0 else None
+    say(f"  同步寫進的 UID（repo 變數 FIREBASE_UID）：{var_uid}")
+
+    try:
+        import firebase_admin
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "firebase-admin"], check=False)
+        import firebase_admin
+    from firebase_admin import auth, credentials, firestore
+    firebase_admin.initialize_app(credentials.Certificate(str(sa_path)))
+    users = [(u.uid, u.email or "") for u in auth.list_users().iterate_all()]
+    say("  Firebase 裡的登入帳號：")
+    for uid, email in users:
+        say(f"    {email:<32} {uid}" + ("  ← 同步寫這個" if uid == var_uid else ""))
+    db = firestore.client()
+    with_data = []
+    for ref in db.collection("users").list_documents():
+        snap = ref.collection("dash").document("data").get()
+        if snap.exists:
+            with_data.append((ref.id, (snap.to_dict() or {}).get("generated_at")))
+    say("  資料庫裡有同步資料的 UID：" + ("、".join(f"{u}（{g}）" for u, g in with_data) or "沒有"))
+
+    email = (st.get("profile") or {}).get("email", "")
+    login_uid = next((u for u, e in users if e.lower() == email.lower()), None)
+    if var_uid and users and var_uid not in [u for u, _ in users]:
+        fix = login_uid or (users[0][0] if len(users) == 1 else None)
+        problems.append((f"FIREBASE_UID ({var_uid}) 不是任何一個登入帳號的 UID，同步寫進了沒人讀得到的地方",
+                         f"gh variable set FIREBASE_UID --repo {repo} --body {fix}" if fix else "把它改成上面 app 登入那個帳號的 UID"))
+        if fix and yes(f"\n  要把 FIREBASE_UID 改成 {fix}（{email or '唯一的帳號'}）並馬上同步一次嗎？"):
+            run(["gh", "variable", "set", "FIREBASE_UID", "--repo", repo, "--body", fix])
+            run(["gh", "workflow", "run", "sync.yml", "--repo", repo])
+            st["uid"] = fix
+            save_state(st)
+            say("  改好了，同步已經開始，大約 1–2 分鐘後 app 就會有資料。")
+            problems.pop()
+    elif not users:
+        problems.append(("Firebase 裡還沒有登入帳號", f"到 {CONSOLE.format(p=sa_proj)}/authentication/users 新增一個"))
+    elif var_uid and runs and any(x["conclusion"] == "success" for x in runs) and var_uid not in [u for u, _ in with_data]:
+        problems.append(("同步顯示成功，但資料庫裡這個 UID 沒有資料", f"gh run view {runs[0]['databaseId']} --repo {repo} --log"))
+
+    say("\n━━ 結果")
+    if not problems:
+        say("  沒看到問題。app 登入的 email 要跟上面標「同步寫這個」的那個帳號一樣；不一樣的話先在 app 的設定登出，再用那個 email 登入。")
+    for what, how in problems:
+        say(f"  ✗ {what}")
+        say(f"    → {how}")
+
+
 if __name__ == "__main__":
-    main()
+    if "--check" in sys.argv[1:]:
+        check()
+    else:
+        main()
