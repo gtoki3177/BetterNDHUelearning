@@ -17,7 +17,9 @@ NDHU e學苑 (Moodle) 同步器
                 排程每 30 分鐘跑一次。--light 強制。
 不帶參數 = 自動: 今天還沒跑過完整的就跑完整, 否則跑輕量 (10 分鐘內剛跑過就跳過)。
 config.ini 設 light_sync = false (完整安裝 / BetterElearning app 用): 作業、繳交狀態、行事曆交給雲端同步,
-這台電腦每天只跑一次完整同步、只為了下載講義和建索引, 其他時候排程叫到也直接結束, 不登入 e學苑。
+這台電腦只為了下載講義和建索引: 排程叫到時先讀雲端同步存在 Firebase 的課程活動清單, 跟上次下載時看到的比,
+有新的 (或改名的) 講義、資料夾、作業才登入 e學苑下載; 沒有就直接結束。另外每 7 天完整檢查一次
+(老師直接換掉資料夾裡的檔案時, 課程頁上看不出來)。讀不到雲端 (沒有 [cloud] 設定) 就照舊每天一次。
 內容沒變就不重寫 latest.json; 同一時間只會跑一個 (moodle.lock); 結果記在 status_moodle.json。
 
 密碼永遠不會以明文出現在這支程式或任何 log 裡。
@@ -966,6 +968,41 @@ def run(mode="heavy"):
     return {"changed": changed, "pending": st["pending"], "assignments": st["assignments"]}
 
 
+FULL_EVERY_DAYS = 7          # light_sync = false 時, 就算雲端沒看到新教材, 也每隔這麼多天完整檢查一次
+MATERIAL_KINDS = ("resource", "folder", "assign")   # 會下載檔案的活動: 講義、資料夾、作業 (附檔)
+
+
+def materials_changed():
+    """完整安裝: 雲端同步看到的課程活動清單 (Firebase dash/data) 跟這台電腦上次下載時的 latest.json 比。
+    回傳 (有新的?, 說明)。讀不到雲端時回傳 (None, 原因)，讓呼叫的人照舊規則跑。"""
+    if not (HERE / "cloud_push.py").exists():
+        return None, "沒有 cloud_push.py"
+    try:
+        sys.path.insert(0, str(HERE))
+        import cloud_push
+        cloud_push.use_config(str(CONFIG_PATH))
+        user = cloud_push.connect()
+        cloud = cloud_push.get(user.collection("dash").document("data")) or {}
+    except BaseException as e:                  # use_config / connect 設定不全時會 sys.exit
+        return None, f"讀不到雲端: {e}"
+    if not cloud.get("courses"):
+        return None, "雲端還沒有課程資料"
+    try:
+        prev = json.loads(JSON_PATH.read_text(encoding="utf-8")) if JSON_PATH.exists() else {}
+    except Exception:
+        prev = {}
+    cp = configparser.ConfigParser()
+    cp.read(CONFIG_PATH, encoding="utf-8-sig")
+    skip = {x.strip() for x in cp.get("moodle", "skip_courses", fallback="").split(",") if x.strip()}
+    seen = {(a.get("url"), a.get("name")) for c in prev.get("courses", []) for a in c.get("activities", [])
+            if a.get("type") in MATERIAL_KINDS}
+    new = [(c.get("name"), i.get("name")) for c in cloud["courses"] if (c.get("code") or "") not in skip
+           for i in c.get("items", []) if i.get("kind") in MATERIAL_KINDS and (i.get("url"), i.get("name")) not in seen]
+    if not new:
+        return False, ""
+    return True, f"{len(new)} 個: " + "、".join(f"{c}/{n}" for c, n in new[:5]) + (" …" if len(new) > 5 else "")
+
+
 def light_sync_enabled():
     """config.ini 的 light_sync (預設 true)。false = 只下載講義: 每天一次完整同步, 不跑輕量同步。"""
     cp = configparser.ConfigParser()
@@ -1004,10 +1041,23 @@ def main():
         mode = "light"
     else:
         lh, la = parse(last_heavy), parse(last_any)
-        if not lh or lh.date() != dt.date.today():
+        if not light_ok:                               # 只下載講義: 雲端看到新教材才下載
+            if not lh or (dt.datetime.now() - lh).days >= FULL_EVERY_DAYS:
+                mode, why = "heavy", "定期完整檢查"
+            else:
+                changed, why = materials_changed()
+                if changed is None:                    # 讀不到雲端: 照舊每天一次
+                    if lh.date() == dt.date.today():
+                        return 0
+                    mode = "heavy"
+                elif not changed:
+                    return 0                           # 沒有新教材, 不登入 e學苑
+                else:
+                    mode, why = "heavy", "雲端看到新的教材: " + why
+            rotate_log()
+            log(f"開始下載講義 ({why})")
+        elif not lh or lh.date() != dt.date.today():
             mode = "heavy"
-        elif not light_ok:
-            return 0                                   # 今天的講義下載過了; 作業和行事曆交給雲端同步
         elif la and (dt.datetime.now() - la).total_seconds() < MIN_GAP_MIN * 60:
             return 0                                   # 剛跑過, 安靜跳過 (不寫 log)
         else:
