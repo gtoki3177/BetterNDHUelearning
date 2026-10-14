@@ -357,7 +357,15 @@ def pc_materials(st):
         say("  這一步只支援 Windows（用到 Windows 的密碼加密和工作排程），略過。")
         return
     if st.get("pc_root") and Path(st["pc_root"], "_moodle", "cred.dat").exists() and st.get("pc_done"):
-        say(f"  已經裝好了：{st['pc_root']}")
+        md = Path(st["pc_root"]) / "_moodle"
+        say(f"  已經裝好了：{st['pc_root']}。更新電腦上的程式、重新註冊排程…")
+        for name in PC_FILES:                                # 只換程式，config.ini、密碼、索引都不動
+            if (HERE / name).exists():
+                shutil.copyfile(HERE / name, md / name)
+        for name in ("cloud_push.py", "summaries.py"):
+            if name == "cloud_push.py" or (md / name).exists():
+                shutil.copyfile(TEMPLATE / "cloud" / name, md / name)
+        ps(md / "install_task.ps1", md)
         return
     if st.get("pc_skip") and not yes("  上次選了不下載。現在要下載嗎？", False):
         return
@@ -665,8 +673,58 @@ def check():
         say(f"    → {how}")
 
 
+# ------------------------------------------------------------------ 移除 (python install.py --uninstall)
+def uninstall():
+    """一項一項問：電腦上的排程、開檔連結、金鑰環境變數、_moodle 資料夾、雲端同步、安裝紀錄。講義檔案本身不動。"""
+    say("BetterElearning 移除（每一項都會先問）")
+    st = load_state()
+    if os.name == "nt":
+        import winreg
+        r = subprocess.run(["powershell", "-NoProfile", "-Command",
+                            "Get-ScheduledTask | Where-Object { $_.TaskName -like 'NDHU * Sync*' } | ForEach-Object { $_.TaskName }"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        tasks = [t.strip() for t in r.stdout.splitlines() if t.strip()]
+        if tasks and yes(f"\n  刪掉這台電腦的排程（{'、'.join(tasks)}）？之後不會再自動下載講義、也不會再跳視窗"):
+            for t in tasks:
+                subprocess.run(["powershell", "-NoProfile", "-Command", f"Unregister-ScheduledTask -TaskName '{t}' -Confirm:$false"])
+            say("  排程刪掉了。")
+        try:
+            winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\betterel").Close()
+            if yes("  移除「點教材直接開檔」的 betterel: 連結？"):
+                subprocess.run(["reg", "delete", r"HKCU\Software\Classes\betterel", "/f"], capture_output=True)
+                say("  移除了。")
+        except OSError:
+            pass
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS) as h:
+                winreg.QueryValueEx(h, "SUMMARY_API_KEY")
+                if yes("  刪掉存在環境變數裡的信件摘要 API 金鑰（SUMMARY_API_KEY）？"):
+                    winreg.DeleteValue(h, "SUMMARY_API_KEY")
+                    say("  刪掉了。")
+        except OSError:
+            pass
+        md = Path(st["pc_root"]) / "_moodle" if st.get("pc_root") else None
+        if md and md.exists() and yes(f"  刪掉 {md}？（程式、設定、加密的密碼、講義索引；各科資料夾裡的講義檔案會留著）", False):
+            shutil.rmtree(md, ignore_errors=True)
+            say("  刪掉了。")
+    repo = st.get("repo")
+    if repo and yes(f"\n  停掉雲端同步？（{repo} 不會再每小時登入 e學苑和信箱）"):
+        r = run(["gh", "workflow", "disable", "sync.yml", "--repo", repo], check=False)
+        say("  停掉了。" if r.returncode == 0 else f"  沒停成功：{(r.stderr or r.stdout).strip()[:200]}")
+        say(f"  要連 repo 和裡面存的密碼一起刪掉：到 https://github.com/{repo}/settings 最下面 Delete this repository。")
+    if st.get("project"):
+        say(f"  要刪掉資料庫（作業、信件、釘選）：到 {CONSOLE.format(p=st['project'])}/settings/general 最下面刪除專案。")
+    say("  手機直接解除安裝 app；網頁版在「設定」登出並清除這台的資料。")
+    if WORK.exists() and yes(f"\n  最後，刪掉 {WORK}？（安裝紀錄、Firebase 金鑰、QR code；刪了之後 --check 和重新安裝都要從頭來）", False):
+        shutil.rmtree(WORK, ignore_errors=True)
+        say("  刪掉了。")
+    say("\n好了。")
+
+
 if __name__ == "__main__":
     if "--check" in sys.argv[1:]:
         check()
+    elif "--uninstall" in sys.argv[1:]:
+        uninstall()
     else:
         main()

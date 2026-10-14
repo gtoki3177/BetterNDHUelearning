@@ -117,7 +117,15 @@ app 選單裡的「立即同步」會叫 GitHub 馬上跑一次同步，大約 1
 - **同步程式**：自動。你的同步 repo 引用 `engine-sync.yml@v1`，維護者把 `v1` 標籤移到新版後，下一個整點就生效。
 - **app**：畫面自己熱更新。選單出現「有新版 app」時，到 Releases 下載覆蓋安裝，資料和登入都會保留。
 - **網頁版**：重新整理就是新版。
-- **電腦上的程式**（講義下載、信件摘要）：下載新版的這個 repo，把 `plugins/better-ndhu-elearning/skills/setup/files/` 裡的 `.py`、`.ps1` 複製到 `_moodle`，`cloud-template/cloud/` 裡的 `summaries.py`、`cloud_push.py` 也一樣。不要蓋掉 `config.ini`。
+- **電腦上的程式**（講義下載、信件摘要）：下載新版的這個 repo，再跑一次 `python install.py`。它會換掉 `_moodle` 裡的程式、重新註冊排程，`config.ini`、密碼和講義索引都不動。
+
+## 移除
+
+```powershell
+python install.py --uninstall
+```
+
+每一項都會先問：電腦上的排程、點教材開檔的連結、`_moodle` 資料夾、雲端同步、安裝紀錄。各科資料夾裡的講義檔案會留著。GitHub 的同步 repo 和 Firebase 專案要到網頁上刪，它會給你網址。
 
 ## 隱私
 
@@ -135,6 +143,7 @@ app 選單裡的「立即同步」會叫 GitHub 馬上跑一次同步，大約 1
 - **信箱出現 `Application-specific password required`**：存成一般密碼了，要用 16 碼應用程式密碼。刪掉 `"pw_mail"` 那行再跑一次。
 - **同步失敗**：到 `https://github.com/<你的帳號>/betterel-sync/actions` 看最近一次的紀錄，或跑 `gh run view --repo <你的帳號>/betterel-sync --log-failed`。
 - **講義下載有錯**：看 `<課程資料夾>\_moodle\log.txt` 最後幾行。排程有沒有在跑：在 `_moodle` 跑 `check_task.ps1`。
+- **每隔一陣子閃一下黑色小視窗**：那是講義下載的排程「NDHU Moodle Sync」，在 Windows 的「工作排程器」裡，不在工作管理員。舊版的排程會用到有視窗的 Python；下載新版再跑一次 `python install.py` 就會換掉。
 - **不想同步某些課**：`config.ini` 的 `skip_courses` 填課號，用逗號分隔。
 - **學校改了 e學苑版面導致抓不到**：歡迎開 issue 或送 PR。
 

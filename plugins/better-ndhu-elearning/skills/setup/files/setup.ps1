@@ -116,4 +116,4 @@ Write-Host ('     {0} "{1}"' -f $py, (Join-Path $here 'set_password.py')) -Foreg
 Write-Host ('     {0} "{1}" --force' -f $py, (Join-Path $here 'moodle_sync.py')) -ForegroundColor Yellow
 Write-Host ''
 Write-Host ('之後查教材:  {0} "{1}" 關鍵字' -f $py, (Join-Path $here 'search.py')) -ForegroundColor DarkGray
-Write-Host '移除排程:    Unregister-ScheduledTask -TaskName ''NDHU Moodle Sync (logon)'', ''NDHU Moodle Sync (daily)''' -ForegroundColor DarkGray
+Write-Host '移除排程:    Unregister-ScheduledTask -TaskName ''NDHU Moodle Sync''' -ForegroundColor DarkGray

@@ -24,12 +24,18 @@ function Get-FirstPath([string[]]$candidates) {
 Write-Host ''
 Write-Host '=== 找 Python ===' -ForegroundColor Cyan
 
-# 1) py launcher 的無視窗版本 pyw.exe — 最穩, 不用管裝在哪
-$exe = Get-FirstPath @(
-    (Join-Path $env:WINDIR 'pyw.exe'),
-    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Launcher\pyw.exe')
-)
-if ($exe) { Write-Host ("pyw.exe      : {0}" -f $exe) -ForegroundColor Green }
+# 1) 問 Python 自己裝在哪 (py 啟動器或 PATH 上的 python)，等一下換成同資料夾的 pythonw.exe。
+#    不用 pyw.exe 啟動器直接跑：它會照腳本第一行的 #!/usr/bin/env python3 去 PATH 找 python3.exe，
+#    常常找到有主控台的那個 (或 Microsoft Store 的空殼)，每次排程都會閃一下黑窗，甚至根本沒跑成。
+$exe = $null
+foreach ($cand in @(@('py', '-3'), @('python'))) {
+    $c = Get-Command $cand[0] -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1
+    if (-not $c) { continue }
+    $pyArgs = @($cand | Select-Object -Skip 1) + @('-c', 'import sys; print(sys.executable)')
+    $real = & $c.Source @pyArgs 2>$null | Select-Object -First 1
+    $exe = Get-FirstPath @($real)
+    if ($exe) { Write-Host ("Python       : {0}" -f $exe) -ForegroundColor Green; break }
+}
 
 # 2) 沒有的話, 從 PATH 裡的 python/pythonw 找
 if (-not $exe) {
