@@ -166,6 +166,15 @@ def build_data(L, prev, cfg):
             "assignments": assignments, "courses": courses, "index": index, "errors": errors}
 
 
+def mail_record(m):
+    atts = [a if isinstance(a, str) else (a.get("filename") or a.get("name") or "")
+            for a in (m.get("attachments") or [])]
+    return {"uid": str(m.get("uid")), "date": m.get("date"), "from": m.get("from_name") or m.get("from_addr"),
+            "addr": (m.get("from_addr") or "").lower(), "subject": m.get("subject") or "",
+            "kw": m.get("keywords") or [], "att": len(atts), "atts": atts,
+            "link": m.get("link"), "excerpt": excerpt(m.get("body"))}
+
+
 def build_mail(M, prev, cfg, summaries):
     prev = prev or {}
     old = {m["uid"]: m for m in prev.get("messages", [])}
@@ -173,12 +182,7 @@ def build_mail(M, prev, cfg, summaries):
     for m in M.get("messages", []):
         if not m.get("unread"):
             continue
-        atts = [a if isinstance(a, str) else (a.get("filename") or a.get("name") or "")
-                for a in (m.get("attachments") or [])]
-        r = {"uid": str(m.get("uid")), "date": m.get("date"), "from": m.get("from_name") or m.get("from_addr"),
-             "addr": (m.get("from_addr") or "").lower(), "subject": m.get("subject") or "",
-             "kw": m.get("keywords") or [], "att": len(atts), "atts": atts,
-             "link": m.get("link"), "excerpt": excerpt(m.get("body"))}
+        r = mail_record(m)
         src = {**old.get(r["uid"], {}), **summaries.get(r["uid"], {})}
         for k in ("summary", "action", "flash"):
             if src.get(k):
@@ -188,6 +192,18 @@ def build_mail(M, prev, cfg, summaries):
             "window_days": M.get("window_days"), "stats": M.get("stats", {}),
             "messages": msgs, "noise": cfg["noise"], "dept": cfg["dept"],
             "errors": list(M.get("errors") or [])}
+
+
+def build_archive(M, cfg):
+    """某個月的信件封存：已讀未讀都留 (read 標記)，給 app 往回翻。"""
+    msgs = []
+    for m in M.get("messages", []):
+        r = mail_record(m)
+        if not m.get("unread"):
+            r["read"] = True
+        msgs.append(r)
+    return {"month": M.get("month"), "generated_at": tz(M.get("generated_at")), "account": M.get("account"),
+            "messages": msgs, "noise": cfg["noise"]}
 
 
 def fit_mail(mail, noise_addr):
@@ -265,6 +281,15 @@ def cmd_overlay(user, d, cfg_path):
     只改 courses 裡教材的 local、root、index 三樣，作業和課程本身維持雲端同步寫的；
     雲端同步之後重組資料時會從上一版沿用這三樣，所以電腦關機也不會被洗掉。"""
     dash = user.collection("dash")
+    try:                                    # AI agent 連不上時先存著的備忘 (tasks.py)，順便送上去
+        import tasks
+        n = tasks.flush_inbox(user)
+        if n:
+            print(json.dumps({"tasks_inbox": f"送出 {n} 筆備忘"}, ensure_ascii=False))
+    except ImportError:
+        pass
+    except Exception as e:  # noqa: BLE001
+        print(json.dumps({"tasks_inbox": f"送不出去: {e!r}"[:200]}, ensure_ascii=False))
     L = read_json(d / "latest.json")
     if not L:
         print(json.dumps({"overlay": "skip (沒有 latest.json)"}))
@@ -380,13 +405,28 @@ def cmd_push(user, d, source, save_state):
     print(json.dumps(out, ensure_ascii=False))
 
 
+def cmd_archive(user, d, month):
+    M = read_json(d / "mail_month.json")
+    if not M or M.get("month") != month:
+        sys.exit(f"沒有 {month} 的 mail_month.json (先跑 python mail_sync.py --month {month})")
+    dash = user.collection("dash")
+    settings = get(dash.document("settings")) or {}
+    cfg = load_config(d / "config.ini", settings.get("noise_senders") or [])
+    arch = build_archive(M, cfg)
+    trimmed = fit_mail(arch, NOISE_ADDR + cfg["noise"])
+    dash.document(f"mail_{month}").set({**arch, "written_at": now_iso()})
+    print(json.dumps({f"mail_{month}": f"written ({len(arch['messages'])} 封" + (f", trimmed {trimmed}" if trimmed else "") + ")"},
+                     ensure_ascii=False))
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["pull", "push", "overlay"])
+    ap.add_argument("cmd", choices=["pull", "push", "overlay", "archive"])
+    ap.add_argument("--month", help="archive：哪個月 (YYYY-MM)，讀 mail_month.json 寫進 dash/mail_YYYY-MM")
     ap.add_argument("--dir", default=".")
     ap.add_argument("--source", default="actions", help="actions / pc：寫進 settings.engines 的名字")
     ap.add_argument("--no-state", action="store_true", help="push 時不寫回原始檔和 session (電腦端用)")
@@ -408,6 +448,8 @@ def main():
     d = Path(a.dir)
     if a.cmd == "pull":
         cmd_pull(user, d)
+    elif a.cmd == "archive":
+        cmd_archive(user, d, a.month)
     else:
         cmd_push(user, d, a.source, not a.no_state)
 

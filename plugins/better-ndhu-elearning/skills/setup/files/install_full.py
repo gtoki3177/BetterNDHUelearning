@@ -453,7 +453,7 @@ def link_app(st):
         webbrowser.open((WORK / "setup-qr.svg").as_uri())
 
 
-PC_FILES = ["moodle_sync.py", "search.py", "set_password.py", "setup.ps1", "install_task.ps1", "check_task.ps1",
+PC_FILES = ["moodle_sync.py", "search.py", "tasks.py", "set_password.py", "setup.ps1", "install_task.ps1", "check_task.ps1",
             "open_local.ps1", "open_local.vbs", "install_open_local.ps1", "config.example.ini", "README.md"]
 
 

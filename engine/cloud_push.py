@@ -281,6 +281,15 @@ def cmd_overlay(user, d, cfg_path):
     只改 courses 裡教材的 local、root、index 三樣，作業和課程本身維持雲端同步寫的；
     雲端同步之後重組資料時會從上一版沿用這三樣，所以電腦關機也不會被洗掉。"""
     dash = user.collection("dash")
+    try:                                    # AI agent 連不上時先存著的備忘 (tasks.py)，順便送上去
+        import tasks
+        n = tasks.flush_inbox(user)
+        if n:
+            print(json.dumps({"tasks_inbox": f"送出 {n} 筆備忘"}, ensure_ascii=False))
+    except ImportError:
+        pass
+    except Exception as e:  # noqa: BLE001
+        print(json.dumps({"tasks_inbox": f"送不出去: {e!r}"[:200]}, ensure_ascii=False))
     L = read_json(d / "latest.json")
     if not L:
         print(json.dumps({"overlay": "skip (沒有 latest.json)"}))
