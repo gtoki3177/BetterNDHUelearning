@@ -335,7 +335,7 @@ def update_caller(repo):
     cur = json.loads(r.stdout)
     if base64.b64decode(cur["content"]).decode("utf-8").replace("\r\n", "\n") == want:
         return False
-    put = ["gh", "api", "-X", "PUT", f"repos/{repo}/contents/{path}", "-f", "message=更新同步設定：secrets 改成一個一個傳",
+    put = ["gh", "api", "-X", "PUT", f"repos/{repo}/contents/{path}", "-f", "message=更新同步設定 (換成最新的範本)",
            "-f", "content=" + base64.b64encode(want.encode("utf-8")).decode(), "-f", "sha=" + cur["sha"]]
     if run(put, check=False).returncode != 0:
         say("  更新同步設定需要 GitHub 的 workflow 權限，會打開瀏覽器請你同意一次。")

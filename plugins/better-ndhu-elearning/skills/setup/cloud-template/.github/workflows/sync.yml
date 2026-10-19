@@ -5,6 +5,11 @@ name: cloud-sync
 # secrets 要一個一個傳：呼叫別的帳號的 workflow 時，secrets: inherit 不會把密碼傳過去。
 on:
   workflow_dispatch:
+    inputs:
+      mail_month:
+        description: "補抓某個月的信 (YYYY-MM)；空白 = 一般同步"
+        required: false
+        default: ""
   schedule:
     - cron: "17 * * * *"
 
@@ -12,6 +17,7 @@ jobs:
   sync:
     uses: gtoki3177/BetterNDHUelearning/.github/workflows/engine-sync.yml@v1
     with:
+      mail_month: ${{ inputs.mail_month || '' }}
       engine_ref: v1
       firebase_uid: ${{ vars.FIREBASE_UID }}
       dept_label: ${{ vars.DEPT_LABEL || '系上' }}

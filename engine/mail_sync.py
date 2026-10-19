@@ -19,6 +19,7 @@ NDHU gms 信箱同步 — 用 IMAP 把最近的信抓成 mail.json。
 常用:
     python mail_sync.py --full         # 忽略快取, 全部重抓
     python mail_sync.py --days 30 --limit 120
+    python mail_sync.py --month 2026-09        # 補抓某個月 (信件封存，app 的「載入更早的信」)
     python mail_sync.py --unread-only
     python mail_sync.py --no-body      # 只抓標題寄件者, 不抓內文
     python mail_sync.py --stats        # 看上次抓的結果摘要
@@ -543,6 +544,77 @@ def run_sync(args):
             pass
 
 
+MONTH_PATH = HERE / "mail_month.json"
+MONTH_LIMIT = 400
+
+
+def run_month(args):
+    """補抓某個月的信 (信件封存用，app 的「載入更早的信」) → mail_month.json。不動 mail.json 和狀態檔。"""
+    cfg = load_config()
+    if not cfg.get("address"):
+        raise SystemExit("config.ini 的 [mail] 沒有 address — 填上 你的學號@gms.ndhu.edu.tw")
+    try:
+        y, mo = (int(x) for x in args.month.split("-"))
+        start = datetime(y, mo, 1)
+    except Exception:
+        raise SystemExit(f"--month 要是 YYYY-MM：{args.month!r}")
+    end = datetime(y + (mo == 12), mo % 12 + 1, 1)
+    want_body = (not args.no_body) and as_bool(cfg["include_body"], True)
+    body_chars = int(cfg["body_chars"])
+    delay = float(cfg["request_delay"])
+    skip_senders = [s.strip().lower() for s in cfg["skip_senders"].split(",") if s.strip()]
+    keywords = [k.strip() for k in cfg["highlight_keywords"].split(",") if k.strip()]
+    started = time.time()
+    password = load_password()
+    box = connect(cfg, password)
+    del password
+    try:
+        folder = cfg["folder"]
+        typ, _ = box.select(f'"{folder}"', readonly=True)
+        if typ != "OK":
+            raise SystemExit(f"打不開信件匣 {folder!r} — 檢查 config.ini 的 folder")
+        crit = f'(SINCE "{start.strftime("%d-%b-%Y")}" BEFORE "{end.strftime("%d-%b-%Y")}")'
+        typ, data = box.uid("search", None, crit)
+        if typ != "OK":
+            raise SystemExit("IMAP search 失敗")
+        uids = [u.decode() for u in (data[0] or b"").split()][-MONTH_LIMIT:]
+        log(f"{args.month} 共 {len(uids)} 封")
+        metas = bulk_meta(box, uids)
+        messages = []
+        for uid in reversed(uids):
+            meta = metas.get(uid)
+            if not meta:
+                continue
+            try:
+                got = fetch_message(box, uid, meta, cfg, want_body)
+            except Exception as exc:
+                log(f"uid {uid} 抓失敗: {exc}", "WARN")
+                continue
+            if not got:
+                continue
+            msg, heavy = got
+            rec = make_record(uid, meta, msg, heavy, cfg, want_body, body_chars, keywords, skip_senders)
+            if rec is None:
+                continue
+            rec["first_seen"], rec["new"] = rec["date"], False
+            messages.append(rec)
+            if delay:
+                time.sleep(delay)
+        messages.sort(key=lambda r: r["date"], reverse=True)
+        payload = {"month": args.month, "generated_at": datetime.now(TZ).isoformat(timespec="seconds"),
+                   "account": cfg["address"], "folder": folder, "messages": messages}
+        tmp = MONTH_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(MONTH_PATH)
+        log(f"{args.month} 完成 — {len(messages)} 封 / {round(time.time() - started, 1)}s")
+        return 0
+    finally:
+        try:
+            box.logout()
+        except Exception:
+            pass
+
+
 def show_stats():
     if not OUT_PATH.exists():
         print("還沒有 mail.json — 先跑一次 python mail_sync.py")
@@ -609,6 +681,7 @@ def main():
     ap.add_argument("--test", action="store_true", help="只驗證登入, 不寫檔")
     ap.add_argument("--full", action="store_true", help="忽略上次的結果, 每封信都重新下載")
     ap.add_argument("--stats", action="store_true", help="印出 mail.json 的摘要")
+    ap.add_argument("--month", help="補抓某個月的信 (YYYY-MM)，寫到 mail_month.json (信件封存用)")
     ap.add_argument("--check-cred", action="store_true",
                     help="檢查存起來的密碼長相 (不會印出密碼本身)")
     args = ap.parse_args()
@@ -617,6 +690,8 @@ def main():
         return check_cred()
     if args.stats:
         return show_stats()
+    if args.month:
+        return run_month(args)
     if args.test:
         run_sync(args)
         return 0

@@ -24,6 +24,10 @@ on:
         description: "用哪個版本的 engine/：跟 uses 後面的 @ 一樣 (v1 / main / commit SHA)"
         type: string
         default: "v1"
+      mail_month:
+        description: "補抓某個月的信 (YYYY-MM，app 的「載入更早的信」)；空白 = 一般同步"
+        type: string
+        default: ""
     secrets:
       MOODLE_USERNAME:
         required: false
@@ -86,7 +90,21 @@ jobs:
           PY
           mkdir -p /tmp/betterel_root
 
+      - name: Mail archive (one month)
+        if: inputs.mail_month != ''
+        working-directory: src/engine
+        env:
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          FIREBASE_UID: ${{ inputs.firebase_uid }}
+          MAIL_MONTH: ${{ inputs.mail_month }}
+        run: |
+          if [ -z "$MAIL_APP_PASSWORD" ]; then echo "沒設 MAIL_APP_PASSWORD，沒辦法補抓信件"; exit 1; fi
+          python mail_sync.py --month "$MAIL_MONTH"
+          python cloud_push.py archive --dir . --month "$MAIL_MONTH"
+
       - name: Pull previous state from Firestore
+        if: inputs.mail_month == ''
         working-directory: src/engine
         env:
           FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
@@ -94,6 +112,7 @@ jobs:
         run: python cloud_push.py pull --dir .
 
       - name: Moodle light sync
+        if: inputs.mail_month == ''
         working-directory: src/engine
         env:
           MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
@@ -101,7 +120,7 @@ jobs:
         run: python moodle_sync.py --light
 
       - name: Mail sync
-        if: always()
+        if: always() && inputs.mail_month == ''
         working-directory: src/engine
         env:
           MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
@@ -110,7 +129,7 @@ jobs:
           python mail_sync.py
 
       - name: Push to Firestore
-        if: always()
+        if: always() && inputs.mail_month == ''
         working-directory: src/engine
         env:
           FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
@@ -120,7 +139,7 @@ jobs:
       - name: Mail summaries
         # 選用：caller repo 設了 SUMMARY_MODEL (和 SUMMARY_BASE_URL、SUMMARY_API_KEY…) 這幾個 secret 才會跑。
         # 用 OpenAI 相容 API 或 Anthropic API 替需注意的新信寫摘要；失敗不影響同步結果。
-        if: always()
+        if: always() && inputs.mail_month == ''
         continue-on-error: true
         working-directory: src/engine
         env:
@@ -136,7 +155,7 @@ jobs:
           python summaries.py auto
 
       - name: Status
-        if: always()
+        if: always() && inputs.mail_month == ''
         working-directory: src/engine
         run: |
           python3 -c "import json,os;[print(k, {x: json.load(open(f'status_{k}.json', encoding='utf-8')).get(x) for x in ('ok','finished_at','changed')}) for k in ('moodle','mail') if os.path.exists(f'status_{k}.json')]" || true
