@@ -10,7 +10,8 @@ app 裡任務欄的備忘存在 Firestore users/{uid}/dash/pins 的 custom 欄�
   python tasks.py add  --config config.ini --json '[...]'
 
 每一筆：
-  {"title": "期中考", "due": "2026-11-05 10:10", "tags": ["作業系統"], "note": "範圍第 1–6 章（來源：10/18 老師的信）"}
+  {"title": "期中考", "due": "2026-11-05 10:10", "tags": ["作業系統"], "note": "範圍第 1–6 章（來源：10/18 老師的信）", "source": "mail"}
+  source：從哪裡整理來的 —— mail (信件) / lecture (講義) / other；app 的卡片上會標出來
   due 可以省略 (沒有期限)；只寫日期就是當天 23:59；時間是台灣時間。
 
 連不到資料庫 (例如在沒有網路的環境) 時，會先存進同一層的 tasks_inbox.json，
@@ -67,6 +68,8 @@ def memo_of(item):
          "created": iso_local(datetime.now(TZ)), "done": False, "by": "agent"}
     if item.get("note"):
         m["note"] = str(item["note"])[:1000]
+    src = str(item.get("source") or "other").lower()
+    m["src"] = src if src in ("mail", "lecture") else "other"
     return m
 
 
@@ -115,7 +118,7 @@ def cmd_mail(user, months):
         snap = dash.document(f"mail_{y}-{mo:02d}").get()
         for m in ((snap.to_dict() or {}).get("messages", []) if snap.exists else []):
             msgs.setdefault(str(m.get("uid")), m)
-    out = sorted(({"date": m.get("date"), "from": m.get("from"), "subject": m.get("subject"), "keywords": m.get("kw") or [],
+    out = sorted(({"date": m.get("date"), "from": m.get("from"), "subject": m.get("subject"), "read": bool(m.get("read")), "keywords": m.get("kw") or [],
                    "excerpt": m.get("excerpt", ""), "summary": m.get("summary", ""), "attachments": m.get("atts") or [], "link": m.get("link")}
                   for m in msgs.values()), key=lambda m: m["date"] or "", reverse=True)
     print(json.dumps({"window_days": mail.get("window_days"), "generated_at": mail.get("generated_at"), "count": len(out), "messages": out},

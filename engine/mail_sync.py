@@ -360,13 +360,37 @@ def bulk_meta(box, uids):
     return out
 
 
+BS_NAME_RE = re.compile(rb'"(?:FILENAME|NAME|filename|name)\*?"\s+"([^"]*)"')
+
+
+def structure_attachments(box, uid):
+    """從 BODYSTRUCTURE 讀附件檔名 (不用下載附件本身)。"""
+    try:
+        typ, data = box.uid("fetch", uid, "(BODYSTRUCTURE)")
+    except Exception:
+        return []
+    if typ != "OK" or not data:
+        return []
+    raw = b" ".join(x if isinstance(x, (bytes, bytearray)) else b" ".join(y for y in x if isinstance(y, (bytes, bytearray)))
+                    for x in data if x)
+    names = []
+    for m in BS_NAME_RE.finditer(raw):
+        name = decode_mime(m.group(1).decode("utf-8", "replace"))
+        if name and name not in names and not name.lower().endswith((".htm", ".html")):
+            names.append(name)
+    return names
+
+
 def fetch_message(box, uid, meta, cfg, want_body):
     max_bytes = int(cfg["max_fetch_kb"]) * 1024
     heavy = bool(meta["size"] and meta["size"] > max_bytes)
-    spec = "(BODY.PEEK[HEADER])" if (heavy or not want_body) else "(BODY.PEEK[])"
+    # 大封的信 (通常是有大附件)：只抓前 max_bytes —— 內文幾乎都在最前面；附件檔名另外從 BODYSTRUCTURE 讀
+    spec = "(BODY.PEEK[HEADER])" if not want_body else f"(BODY.PEEK[]<0.{max_bytes}>)" if heavy else "(BODY.PEEK[])"
     typ, data = box.uid("fetch", uid, spec)
     if typ != "OK" or not data or not isinstance(data[0], tuple):
         return None
+    if heavy:
+        meta["att_names"] = structure_attachments(box, uid)
     return email.message_from_bytes(data[0][1]), heavy
 
 
@@ -387,8 +411,11 @@ def make_record(uid, meta, msg, heavy, cfg, want_body, body_chars, keywords, ski
         dt = datetime.now(TZ)
 
     body, truncated = ("", False)
-    if want_body and not heavy:
-        body, truncated = extract_body(msg, body_chars)
+    if want_body:
+        try:
+            body, truncated = extract_body(msg, body_chars)      # 大封的信也抓得到 (前段內容就夠)
+        except Exception:
+            body, truncated = ("", False)
 
     haystack = f"{subject}\n{body}"
     hits = [k for k in keywords if k in haystack]
@@ -407,9 +434,10 @@ def make_record(uid, meta, msg, heavy, cfg, want_body, body_chars, keywords, ski
         "subject": subject,
         "unread": "\\Seen" not in meta["flags"],
         "starred": "\\Flagged" in meta["flags"],
-        "attachments": attachment_names(msg),
+        "attachments": meta.get("att_names") or attachment_names(msg),
         "body": body,
-        "body_truncated": truncated or heavy,
+        "body_truncated": truncated,
+        "hv": 2,                                                # 新的抓法 (大封的信也有內文和附件檔名)
         "size_kb": round(meta["size"] / 1024, 1) if meta["size"] else None,
         "keywords": hits,
         "link": link,
@@ -484,6 +512,8 @@ def run_sync(args):
             if not meta:
                 continue
             old = previous.get(uid)
+            if old and old.get("hv") != 2 and (old.get("size_kb") or 0) * 1024 > int(cfg["max_fetch_kb"]) * 1024:
+                old = None                                      # 以前大封的信沒抓內文和附件：這次重抓一次
             if old and old.get("from_addr") is not None:
                 if any(s in (old.get("from_addr") or "") for s in skip_senders):
                     skipped += 1

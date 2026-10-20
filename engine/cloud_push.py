@@ -180,9 +180,9 @@ def build_mail(M, prev, cfg, summaries):
     old = {m["uid"]: m for m in prev.get("messages", [])}
     msgs = []
     for m in M.get("messages", []):
+        r = mail_record(m)                                      # 讀過的也留著 (app 標成已讀)：讀了不代表不用再找
         if not m.get("unread"):
-            continue
-        r = mail_record(m)
+            r["read"] = True
         src = {**old.get(r["uid"], {}), **summaries.get(r["uid"], {})}
         for k in ("summary", "action", "flash"):
             if src.get(k):
@@ -388,7 +388,7 @@ def cmd_push(user, d, source, save_state):
             out["mail"] = "unchanged"
         else:
             dash.document("mail").set({**mail, **written})
-            out["mail"] = f"written ({len(mail['messages'])} unread" + (f", trimmed {trimmed}" if trimmed else "") + ")"
+            out["mail"] = f"written ({len(mail['messages'])} 封" + (f", trimmed {trimmed}" if trimmed else "") + ")"
 
     if save_state:
         for doc_id, fname in RAW.items():
