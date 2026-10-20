@@ -28,6 +28,10 @@ on:
         description: "補抓某個月的信 (YYYY-MM，app 的「載入更早的信」)；空白 = 一般同步"
         type: string
         default: ""
+      submit_id:
+        description: "代交作業 (app 送來的 submit 文件 id)；空白 = 一般同步"
+        type: string
+        default: ""
     secrets:
       MOODLE_USERNAME:
         required: false
@@ -111,8 +115,19 @@ jobs:
           FIREBASE_UID: ${{ inputs.firebase_uid }}
         run: python cloud_push.py pull --dir .
 
+      - name: Submit assignment
+        if: inputs.submit_id != ''
+        working-directory: src/engine
+        env:
+          MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
+          MOODLE_COOKIE_FILE: moodle_cookies.json
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          FIREBASE_UID: ${{ inputs.firebase_uid }}
+          SUBMIT_ID: ${{ inputs.submit_id }}
+        run: python submit.py --id "$SUBMIT_ID"
+
       - name: Moodle light sync
-        if: inputs.mail_month == ''
+        if: inputs.mail_month == '' && inputs.submit_id == ''
         working-directory: src/engine
         env:
           MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
@@ -120,7 +135,7 @@ jobs:
         run: python moodle_sync.py --light
 
       - name: Mail sync
-        if: always() && inputs.mail_month == ''
+        if: always() && inputs.mail_month == '' && inputs.submit_id == ''
         working-directory: src/engine
         env:
           MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
@@ -129,7 +144,7 @@ jobs:
           python mail_sync.py
 
       - name: Push to Firestore
-        if: always() && inputs.mail_month == ''
+        if: always() && inputs.mail_month == '' && inputs.submit_id == ''
         working-directory: src/engine
         env:
           FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
@@ -139,7 +154,7 @@ jobs:
       - name: Mail summaries
         # 選用：caller repo 設了 SUMMARY_MODEL (和 SUMMARY_BASE_URL、SUMMARY_API_KEY…) 這幾個 secret 才會跑。
         # 用 OpenAI 相容 API 或 Anthropic API 替需注意的新信寫摘要；失敗不影響同步結果。
-        if: always() && inputs.mail_month == ''
+        if: always() && inputs.mail_month == '' && inputs.submit_id == ''
         continue-on-error: true
         working-directory: src/engine
         env:
@@ -155,7 +170,7 @@ jobs:
           python summaries.py auto
 
       - name: Status
-        if: always() && inputs.mail_month == ''
+        if: always() && inputs.mail_month == '' && inputs.submit_id == ''
         working-directory: src/engine
         run: |
           python3 -c "import json,os;[print(k, {x: json.load(open(f'status_{k}.json', encoding='utf-8')).get(x) for x in ('ok','finished_at','changed')}) for k in ('moodle','mail') if os.path.exists(f'status_{k}.json')]" || true

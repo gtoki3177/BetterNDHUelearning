@@ -10,6 +10,10 @@ on:
         description: "補抓某個月的信 (YYYY-MM)；空白 = 一般同步"
         required: false
         default: ""
+      submit_id:
+        description: "代交作業 (app 送來的)；空白 = 一般同步"
+        required: false
+        default: ""
   schedule:
     - cron: "17 * * * *"
 
@@ -18,6 +22,7 @@ jobs:
     uses: gtoki3177/BetterNDHUelearning/.github/workflows/engine-sync.yml@v1
     with:
       mail_month: ${{ inputs.mail_month || '' }}
+      submit_id: ${{ inputs.submit_id || '' }}
       engine_ref: v1
       firebase_uid: ${{ vars.FIREBASE_UID }}
       dept_label: ${{ vars.DEPT_LABEL || '系上' }}
