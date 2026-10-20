@@ -46,17 +46,22 @@ def state(ref, **kw):
 
 
 def load_files(ref, meta):
-    """把切塊存的檔案拼回來，先確認跟 app 算的指紋一樣 (雲端暫存沒壞)。"""
+    """把切塊存的檔案拼回來，每一塊都對過 app 算的指紋 (雲端暫存沒壞)；整個檔案的指紋之後拿來跟 e學苑上的比。"""
     out = []
     for f in meta.get("files", []):
         parts = []
         for k in range(int(f.get("chunks", 0))):
             d = ref.collection("chunks").document(f"{f['idx']}_{k}").get().to_dict() or {}
-            parts.append(d.get("b64", ""))
-        raw = base64.b64decode("".join(parts))
-        if hashlib.sha256(raw).hexdigest() != f["sha256"]:
+            piece = base64.b64decode(d.get("b64", ""))
+            if d.get("h") and hashlib.sha256(piece).hexdigest() != d["h"]:
+                raise SubmitError(f"{f['name']} 在雲端暫存時壞掉了 (第 {k + 1} 塊指紋對不上)，請重新送一次")
+            parts.append(piece)
+        raw = b"".join(parts)
+        if f.get("sha256") and hashlib.sha256(raw).hexdigest() != f["sha256"]:
             raise SubmitError(f"{f['name']} 在雲端暫存時壞掉了 (指紋對不上)，請重新送一次")
-        out.append({"name": f["name"], "raw": raw, "sha256": f["sha256"]})
+        if f.get("size") and len(raw) != int(f["size"]):
+            raise SubmitError(f"{f['name']} 在雲端暫存時少了一截 ({len(raw)} / {f['size']} bytes)，請重新送一次")
+        out.append({"name": f["name"], "raw": raw, "sha256": hashlib.sha256(raw).hexdigest()})
     if not out:
         raise SubmitError("沒有要交的檔案")
     return out
@@ -83,6 +88,7 @@ def submission_form(html):
     acc = re.search(r'"target":"id_files_filemanager","accepted_types":\[([^\]]*)\]', html)
     lic = re.search(r'"defaultlicense":"([^"]+)"', html)
     maxfiles = re.search(r'"maxfiles":"?(-?\d+)"?,"client_id"', html)
+    maxbytes = re.search(r'"maxbytes":"?(\d+)"?,"maxfiles"', html)
     return {
         "fields": fields,
         "itemid": fields["files_filemanager"],
@@ -91,6 +97,7 @@ def submission_form(html):
         "accepted": [t.strip().strip('"').lower() for t in acc.group(1).split(",")] if acc and acc.group(1).strip() else [],
         "license": lic.group(1) if lic else "unknown",
         "maxfiles": int(maxfiles.group(1)) if maxfiles else -1,
+        "maxbytes": int(maxbytes.group(1)) if maxbytes else 0,
     }
 
 
@@ -180,6 +187,9 @@ def run(sid):
             bad = [f["name"] for f in files if not any(f["name"].lower().endswith(t) for t in form["accepted"] if t.startswith("."))]
             if bad and not any(t in ("*", "") for t in form["accepted"]):
                 raise SubmitError(f"這個作業只收 {'、'.join(form['accepted'])}，{'、'.join(bad)} 不符合")
+        big = [f["name"] for f in files if form["maxbytes"] and len(f["raw"]) > form["maxbytes"]]
+        if big:
+            raise SubmitError(f"這個作業每個檔案最大 {form['maxbytes'] // 1048576} MB，{'、'.join(big)} 太大了")
         if form["maxfiles"] > 0 and len(files) > form["maxfiles"]:
             raise SubmitError(f"這個作業最多只能交 {form['maxfiles']} 個檔案")
 
