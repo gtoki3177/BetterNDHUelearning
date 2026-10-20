@@ -13,6 +13,19 @@ description: 把信件、講義、公告裡提到的考試、截止日、重要�
 
 如果 `_moodle\` 裡沒有 `tasks.py`（舊版安裝），請使用者在安裝的那台電腦跑一次 `python install.py --check` 更新，或從 BetterNDHUelearning 的 `engine/tasks.py` 複製一份過去。
 
+## 資料從哪裡來
+
+- **信件**：用 `tasks.py mail` 讀，不要開瀏覽器、不要連信箱。信件是雲端同步整理好的（最近 14 天，只有未讀），每封有主旨、寄件人、日期、關鍵字、內文前段摘要（`excerpt`）和附件檔名：
+
+  ```
+  python tasks.py mail --config config.ini
+  python tasks.py mail --config config.ini --months 2   # 連最近兩個月的封存一起讀（使用者在 app 裡載入過的月份才有）
+  ```
+
+  電腦上的 `_moodle` 資料夾裡**沒有** `mail.json`（信件同步在雲端跑），不要去找它。`excerpt` 只有內文前段；如果截止日不在裡面、又確定需要全文，再問使用者要不要打開那封信。
+- **e學苑作業**：`tasks.py list` 的 `assignments`（已經在任務欄裡了，不用再加成備忘）。
+- **講義**：用 search-materials skill 查 `state.db`。
+
 ## 步驟
 
 1. **先看現有的任務**，避免重複：

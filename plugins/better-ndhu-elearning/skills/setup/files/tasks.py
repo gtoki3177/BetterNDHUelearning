@@ -4,6 +4,8 @@ app 裡任務欄的備忘存在 Firestore users/{uid}/dash/pins 的 custom 欄�
 這支程式用電腦上同步用的金鑰 (config.ini 的 [cloud]) 直接寫進去，app 打開就會看到。
 
   python tasks.py list --config config.ini                 # 列出現有的作業和備忘 (JSON)，新增前先看有沒有重複
+  python tasks.py mail --config config.ini [--months 2]    # 讀信件 (雲端同步好的：主旨、寄件人、日期、摘要)，找截止日用；
+                                                            #   --months N 連最近 N 個月的封存一起讀 (有載入過的才有)
   python tasks.py add  --config config.ini --file new.json # 新增 (new.json 是陣列，格式見下)
   python tasks.py add  --config config.ini --json '[...]'
 
@@ -100,6 +102,26 @@ def cmd_list(user):
     print(json.dumps(out, ensure_ascii=False, indent=2))
 
 
+def cmd_mail(user, months):
+    """信件：最近 14 天 (雲端同步寫的 dash/mail) + 最近幾個月的封存 (dash/mail_YYYY-MM，app 載入過才有)。不用開瀏覽器、不用連信箱。"""
+    dash = user.collection("dash")
+    mail = dash.document("mail").get().to_dict() or {}
+    msgs = {str(m.get("uid")): m for m in mail.get("messages", [])}
+    now = datetime.now(TZ)
+    for k in range(max(0, months)):
+        y, mo = now.year, now.month - k
+        while mo < 1:
+            y, mo = y - 1, mo + 12
+        snap = dash.document(f"mail_{y}-{mo:02d}").get()
+        for m in ((snap.to_dict() or {}).get("messages", []) if snap.exists else []):
+            msgs.setdefault(str(m.get("uid")), m)
+    out = sorted(({"date": m.get("date"), "from": m.get("from"), "subject": m.get("subject"), "keywords": m.get("kw") or [],
+                   "excerpt": m.get("excerpt", ""), "summary": m.get("summary", ""), "attachments": m.get("atts") or [], "link": m.get("link")}
+                  for m in msgs.values()), key=lambda m: m["date"] or "", reverse=True)
+    print(json.dumps({"window_days": mail.get("window_days"), "generated_at": mail.get("generated_at"), "count": len(out), "messages": out},
+                     ensure_ascii=False, indent=2))
+
+
 def flush_inbox(user):
     """把之前連不上時存下來的備忘送上去 (cloud_push.py overlay 會叫)。回傳送了幾筆。"""
     if not INBOX.exists():
@@ -133,7 +155,8 @@ def main():
     except Exception:
         pass
     ap = argparse.ArgumentParser(description="讀 / 新增 BetterElearning 任務欄的備忘")
-    ap.add_argument("cmd", choices=["list", "add"])
+    ap.add_argument("cmd", choices=["list", "add", "mail"])
+    ap.add_argument("--months", type=int, default=0, help="mail：連最近幾個月的封存一起讀")
     ap.add_argument("--config", default=str(HERE / "config.ini"), help="config.ini (讀 [cloud] 的金鑰和 uid)")
     ap.add_argument("--file", help="add：JSON 陣列檔")
     ap.add_argument("--json", help="add：直接給 JSON 陣列字串")
@@ -141,6 +164,9 @@ def main():
     cfg = a.config if Path(a.config).exists() else None
     if a.cmd == "list":
         cmd_list(connect(cfg))
+        return
+    if a.cmd == "mail":
+        cmd_mail(connect(cfg), a.months)
         return
     raw = Path(a.file).read_text(encoding="utf-8-sig") if a.file else (a.json or sys.stdin.read())
     items = json.loads(raw)
