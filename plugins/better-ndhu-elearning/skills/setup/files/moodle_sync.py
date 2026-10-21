@@ -138,6 +138,14 @@ def write_status(**kw):
     os.replace(tmp, STATUS_PATH)
 
 
+def last_failed():
+    """上一次 (完整) 同步是不是失敗了 (status_moodle.json 的 ok)。"""
+    try:
+        return json.loads(STATUS_PATH.read_text(encoding="utf-8")).get("ok") is False
+    except Exception:
+        return False
+
+
 def content_view(snap, with_new_files):
     """比對「內容有沒有變」用: 拿掉時間戳、耗時、會隨時間變的剩餘天數。"""
     if not snap:
@@ -1057,7 +1065,9 @@ def main():
                         return 0
                     mode = "heavy"
                 elif not changed:
-                    return 0                           # 沒有新教材, 不登入 e學苑
+                    if not last_failed():
+                        return 0                       # 沒有新教材, 不登入 e學苑
+                    mode, why = "heavy", "上次完整同步失敗, 重試"   # 不然失敗的狀態會一直掛著 (例如早上網路還沒好)
                 else:
                     mode, why = "heavy", "雲端看到新的教材: " + why
             rotate_log()
