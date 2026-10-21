@@ -172,7 +172,8 @@ def mail_record(m):
     return {"uid": str(m.get("uid")), "date": m.get("date"), "from": m.get("from_name") or m.get("from_addr"),
             "addr": (m.get("from_addr") or "").lower(), "subject": m.get("subject") or "",
             "kw": m.get("keywords") or [], "att": len(atts), "atts": atts,
-            "link": m.get("link"), "excerpt": excerpt(m.get("body"))}
+            "link": m.get("link"), "excerpt": excerpt(m.get("body")),
+            **({"links": [{"t": x.get("t", ""), "u": x["u"]} for x in m["links"][:8] if x.get("u")]} if m.get("links") else {})}
 
 
 def build_mail(M, prev, cfg, summaries):
@@ -213,8 +214,9 @@ def fit_mail(mail, noise_addr):
         if size() <= DOC_LIMIT:
             break
         for r in mail["messages"]:
-            if bucket(r, noise_addr) == level and r.get("excerpt"):
+            if bucket(r, noise_addr) == level and (r.get("excerpt") or r.get("links")):
                 r["excerpt"] = ""
+                r.pop("links", None)
                 trimmed += 1
     while size() > DOC_LIMIT and mail["messages"]:
         mail["messages"].pop()

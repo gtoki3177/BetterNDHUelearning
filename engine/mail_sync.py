@@ -259,6 +259,43 @@ def extract_body(msg, limit):
     return text, truncated
 
 
+MAX_LINKS = 12
+URL_RE = re.compile(r"https?://[^\s<>\"'）)】」，。、]+", re.I)
+
+
+def extract_links(msg):
+    """信裡的連結：html 的 <a href> (帶連結文字) + 純文字裡的網址。只留 http(s)，同一個網址只留一次，最多 MAX_LINKS 個。
+    很多信 (例如導師的表單) 內文只有一串連結字，網址藏在 href 裡，去標籤後就看不到了。"""
+    out, seen = [], set()
+
+    def add(url, text=""):
+        url = html_mod.unescape(url or "").strip()
+        if not re.match(r"https?://", url, re.I) or url in seen or len(out) >= MAX_LINKS:
+            return
+        seen.add(url)
+        text = re.sub(r"\s+", " ", html_mod.unescape(re.sub(r"<[^>]+>", "", text or ""))).strip()   # 連結文字裡的 <b> 這種拿掉，不留空白
+        out.append({"t": "" if text == url else text[:80], "u": url[:600]})
+
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    htmls, plains = [], []
+    for part in parts:
+        if part.get_content_maintype() == "multipart" or "attachment" in str(part.get("Content-Disposition") or "").lower():
+            continue
+        ctype = part.get_content_type()
+        if ctype == "text/html":
+            htmls.append(part_text(part))
+        elif ctype == "text/plain":
+            plains.append(part_text(part))
+    for h in htmls:
+        h = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", h, flags=re.S | re.I)
+        for m in re.finditer(r"<a\b[^>]*?href\s*=\s*([\"'])(.*?)\1[^>]*>(.*?)</a>", h, flags=re.S | re.I):
+            add(m.group(2), m.group(3))
+    for t in (plains if not out else []) + ([] if plains else [html_to_text(h) for h in htmls]):   # 沒有 html 連結才看純文字網址
+        for m in URL_RE.finditer(t):
+            add(m.group(0).rstrip(".,;:!?"))
+    return out
+
+
 def attachment_names(msg):
     names = []
     if not msg.is_multipart():
@@ -410,12 +447,16 @@ def make_record(uid, meta, msg, heavy, cfg, want_body, body_chars, keywords, ski
     except Exception:
         dt = datetime.now(TZ)
 
-    body, truncated = ("", False)
+    body, truncated, links = ("", False, [])
     if want_body:
         try:
             body, truncated = extract_body(msg, body_chars)      # 大封的信也抓得到 (前段內容就夠)
         except Exception:
             body, truncated = ("", False)
+        try:
+            links = extract_links(msg)
+        except Exception:
+            links = []
 
     haystack = f"{subject}\n{body}"
     hits = [k for k in keywords if k in haystack]
@@ -437,6 +478,7 @@ def make_record(uid, meta, msg, heavy, cfg, want_body, body_chars, keywords, ski
         "attachments": meta.get("att_names") or attachment_names(msg),
         "body": body,
         "body_truncated": truncated,
+        "links": links,
         "hv": 2,                                                # 新的抓法 (大封的信也有內文和附件檔名)
         "size_kb": round(meta["size"] / 1024, 1) if meta["size"] else None,
         "keywords": hits,
@@ -514,6 +556,8 @@ def run_sync(args):
             old = previous.get(uid)
             if old and old.get("hv") != 2 and (old.get("size_kb") or 0) * 1024 > int(cfg["max_fetch_kb"]) * 1024:
                 old = None                                      # 以前大封的信沒抓內文和附件：這次重抓一次
+            if old and want_body and "links" not in old:
+                old = None                                      # 以前沒抓信裡的連結：重抓一次
             if old and old.get("from_addr") is not None:
                 if any(s in (old.get("from_addr") or "") for s in skip_senders):
                     skipped += 1

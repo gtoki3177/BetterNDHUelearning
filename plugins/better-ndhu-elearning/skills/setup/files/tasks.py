@@ -119,7 +119,8 @@ def cmd_mail(user, months):
         for m in ((snap.to_dict() or {}).get("messages", []) if snap.exists else []):
             msgs.setdefault(str(m.get("uid")), m)
     out = sorted(({"date": m.get("date"), "from": m.get("from"), "subject": m.get("subject"), "read": bool(m.get("read")), "keywords": m.get("kw") or [],
-                   "excerpt": m.get("excerpt", ""), "summary": m.get("summary", ""), "attachments": m.get("atts") or [], "link": m.get("link")}
+                   "excerpt": m.get("excerpt", ""), "summary": m.get("summary", ""), "attachments": m.get("atts") or [], "link": m.get("link"),
+                   "links": m.get("links") or []}
                   for m in msgs.values()), key=lambda m: m["date"] or "", reverse=True)
     print(json.dumps({"window_days": mail.get("window_days"), "generated_at": mail.get("generated_at"), "count": len(out), "messages": out},
                      ensure_ascii=False, indent=2))
