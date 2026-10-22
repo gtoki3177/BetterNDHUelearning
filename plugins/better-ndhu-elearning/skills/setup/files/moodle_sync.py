@@ -677,7 +677,7 @@ def run(mode="heavy"):
     root = Path((S.get("root_folder") or "").strip() or str(HERE.parent))
     want_sem = S.get("semester", "auto")
     do_download = S.getboolean("download_materials", True) and not light
-    do_calendar = S.getboolean("light_sync", True)     # 只下載講義的話, 行事曆交給雲端同步
+    do_calendar = S.getboolean("light_sync", True) or FALLBACK   # 只下載講義的話, 行事曆交給雲端同步 (雲端連不到 e學苑時這台接手, 照抓)
     do_index = S.getboolean("build_index", True)
     max_mb = S.getfloat("max_file_mb", 80.0)
     delay = S.getfloat("request_delay", 0.6)
@@ -986,17 +986,63 @@ FULL_EVERY_DAYS = 7          # light_sync = false 時, 就算雲端沒看到新�
 MATERIAL_KINDS = ("resource", "folder", "assign")   # 會下載檔案的活動: 講義、資料夾、作業 (附檔)
 
 
+FALLBACK = False        # 這一輪是不是在幫雲端同步接手 (見 cloud_moodle_down)
+CLOUD_STALE_H = 3       # 雲端同步超過這麼多小時沒跑, 也當成連不到
+_CLOUD = {}
+
+
+def cloud_user():
+    """Firebase 的使用者文件 (用 config.ini 的 [cloud])；同一次執行只連一次。連不上會丟例外。"""
+    if "user" not in _CLOUD:
+        sys.path.insert(0, str(HERE))
+        import cloud_push
+        cloud_push.use_config(str(CONFIG_PATH))
+        _CLOUD["user"] = cloud_push.connect()
+    return _CLOUD["user"]
+
+
+def cloud_moodle_down():
+    """雲端同步 (GitHub Actions，機器在國外) 最近一次連 e學苑 失敗了、或好幾個小時沒跑 → (True, 說明)。
+    學校有時會擋境外連線 (2026-10 因為 PHP 漏洞)，這時改由這台在台灣的電腦同步作業、繳交狀態、行事曆，推上雲端；
+    雲端恢復後自動退回原本的分工 (這台只下載講義)。讀不到雲端 → (False, 原因)。"""
+    if not (HERE / "cloud_push.py").exists():
+        return False, ""
+    try:
+        import cloud_push
+        eng = ((cloud_push.get(cloud_user().collection("dash").document("settings")) or {}).get("engines") or {}).get("actions") or {}
+    except BaseException as e:                  # use_config / connect 設定不全時會 sys.exit
+        return False, f"讀不到雲端: {e}"
+    if not eng.get("at"):
+        return False, "雲端還沒同步過"
+    if (eng.get("moodle") or {}).get("ok") is False:
+        return True, "雲端同步連不到 e學苑 (學校可能擋了境外連線), 這台電腦接手同步作業"
+    try:
+        age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(eng["at"]).astimezone(dt.timezone.utc)).total_seconds()
+    except Exception:
+        return False, ""
+    if age > CLOUD_STALE_H * 3600:
+        return True, f"雲端同步 {age / 3600:.0f} 小時沒跑了, 這台電腦接手同步作業"
+    return False, ""
+
+
+def push_fallback():
+    """接手同步完：把作業 / 繳交狀態推上雲端 (dash/data)，同步紀錄記在「電腦」。雲端上的比較新就不蓋。"""
+    try:
+        import cloud_push
+        cloud_push.cmd_push(cloud_user(), HERE, "pc", False)
+        log("已把作業和繳交狀態推上雲端 (代替雲端同步)")
+    except BaseException as e:
+        log(f"推上雲端失敗: {e!r}"[:300], "WARN")
+
+
 def materials_changed():
     """完整安裝: 雲端同步看到的課程活動清單 (Firebase dash/data) 跟這台電腦上次下載時的 latest.json 比。
     回傳 (有新的?, 說明)。讀不到雲端時回傳 (None, 原因)，讓呼叫的人照舊規則跑。"""
     if not (HERE / "cloud_push.py").exists():
         return None, "沒有 cloud_push.py"
     try:
-        sys.path.insert(0, str(HERE))
         import cloud_push
-        cloud_push.use_config(str(CONFIG_PATH))
-        user = cloud_push.connect()
-        cloud = cloud_push.get(user.collection("dash").document("data")) or {}
+        cloud = cloud_push.get(cloud_user().collection("dash").document("data")) or {}
     except BaseException as e:                  # use_config / connect 設定不全時會 sys.exit
         return None, f"讀不到雲端: {e}"
     if not cloud.get("courses"):
@@ -1056,22 +1102,30 @@ def main():
     else:
         lh, la = parse(last_heavy), parse(last_any)
         if not light_ok:                               # 只下載講義: 雲端看到新教材才下載
+            global FALLBACK
+            down, why_down = cloud_moodle_down()
+            mode = None
             if not lh or (dt.datetime.now() - lh).days >= FULL_EVERY_DAYS:
                 mode, why = "heavy", "定期完整檢查"
             else:
                 changed, why = materials_changed()
                 if changed is None:                    # 讀不到雲端: 照舊每天一次
-                    if lh.date() == dt.date.today():
-                        return 0
-                    mode = "heavy"
-                elif not changed:
-                    if not last_failed():
-                        return 0                       # 沒有新教材, 不登入 e學苑
-                    mode, why = "heavy", "上次完整同步失敗, 重試"   # 不然失敗的狀態會一直掛著 (例如早上網路還沒好)
-                else:
+                    if lh.date() != dt.date.today():
+                        mode = "heavy"
+                elif changed:
                     mode, why = "heavy", "雲端看到新的教材: " + why
+                elif last_failed():
+                    mode, why = "heavy", "上次完整同步失敗, 重試"   # 不然失敗的狀態會一直掛著 (例如早上網路還沒好)
+            if down:                                   # 雲端連不到 e學苑: 這台接手 (作業、繳交狀態、行事曆)
+                FALLBACK = True
+                if mode is None:
+                    mode, why = "light", why_down
+                else:
+                    why = f"{why}; {why_down}"
+            if mode is None:
+                return 0                               # 沒有新教材, 雲端也正常: 不登入 e學苑
             rotate_log()
-            log(f"開始下載講義 ({why})")
+            log(f"開始{'下載講義' if mode == 'heavy' else '同步作業'} ({why})")
         elif not lh or lh.date() != dt.date.today():
             mode = "heavy"
         elif la and (dt.datetime.now() - la).total_seconds() < MIN_GAP_MIN * 60:
@@ -1090,6 +1144,8 @@ def main():
         write_status(finished_at=fin, ok=True, error=None, changed=res["changed"],
                      **({"changed_at": fin} if res["changed"] else {}),
                      **({"last_heavy": fin} if mode == "heavy" else {}))
+        if FALLBACK:
+            push_fallback()
         return 0
     except SystemExit as exc:
         write_status(finished_at=now_iso(), ok=False, error=str(exc.code))

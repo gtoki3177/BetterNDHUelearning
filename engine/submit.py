@@ -2,6 +2,10 @@
 這支在雲端 (GitHub Actions) 登入 e學苑交上去，交完把作業頁上的檔案下載回來比對 SHA-256，結果寫回 submit/{id}。
 
   python submit.py --id <submit id>
+  python submit.py --pending       # 電腦用 (排程每幾分鐘一次)：把雲端連不到 e學苑、留給電腦代交的作業交掉
+
+雲端 (GitHub Actions，機器在國外) 連不到 e學苑 時 (學校有時會擋境外連線)：不算失敗、不刪暫存的檔案，
+標成 relay = "pc" 留在 queued，等在台灣的電腦 (完整安裝的排程) 用 --pending 接手交。
 
 submit/{id} 的內容 (app 寫的)：
   {"cmid": 158926, "url": "...view.php?id=158926", "title": "計算機結構 HW#3", "replace": true, "dry": false,
@@ -34,6 +38,13 @@ TZ = timezone(timedelta(hours=8))
 
 class SubmitError(Exception):
     pass
+
+
+class Unreachable(Exception):
+    """連不到 e學苑 (逾時、連線被拒)：雲端上的話留給電腦代交。"""
+
+
+ON_CLOUD = os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 def now_iso():
@@ -160,12 +171,13 @@ def verify(mo, cmid, files, dry, itemid):
     return result, status, sorted(remote)
 
 
-def run(sid):
-    user = cloud_push.connect()
+def run(sid, user=None):
+    user = user or cloud_push.connect()
     ref = user.collection("submit").document(sid)
     meta = ref.get().to_dict()
     if not meta:
         raise SystemExit(f"找不到 submit/{sid}")
+    keep = False                                    # 留給電腦代交：暫存的檔案不能刪
     try:
         files = load_files(ref, meta)
         cmid = int(meta.get("cmid") or re.search(r"id=(\d+)", meta.get("url", "")).group(1))
@@ -177,7 +189,13 @@ def run(sid):
         S = cfg["moodle"]
         mo = ms.Moodle(S.get("base_url", "https://elearn4.ndhu.edu.tw/moodle"), S.get("username", "").strip(),
                        ms.load_password(), delay=0.3)
-        mo.login()
+        try:
+            mo.login()
+        except Exception as e:  # noqa: BLE001
+            import requests
+            if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+                raise Unreachable(repr(e)[:200]) from e
+            raise
 
         page = mo.get(f"/mod/assign/view.php?id={cmid}&action=editsubmission")
         form = submission_form(page.text)
@@ -214,14 +232,41 @@ def run(sid):
         ok = all(x["ok"] for x in result)
         state(ref, state="done" if ok else "failed", dry=dry, files_result=result, status_text=status, remote_files=remote,
               **({} if ok else {"error": "交上去了，但檔案比對沒有通過：" + "；".join(f"{x['name']} {x.get('why', '')}" for x in result if not x["ok"])}))
+    except Unreachable as e:
+        if ON_CLOUD:                                # 雲端連不到：留給電腦 (不刪檔案、不算失敗)
+            keep = True
+            state(ref, state="queued", relay="pc", note=f"雲端連不到 e學苑，等電腦代交 ({e})"[:300])
+        else:
+            state(ref, state="failed", error="連不到 e學苑，晚點再交一次")
     except SubmitError as e:
         state(ref, state="failed", error=str(e))
     except Exception as e:  # noqa: BLE001
         state(ref, state="failed", error=f"未預期的錯誤：{e!r}"[:300])
         raise
     finally:
-        for d in ref.collection("chunks").list_documents():   # 暫存的檔案用完就刪
-            d.delete()
+        if not keep:
+            for d in ref.collection("chunks").list_documents():   # 暫存的檔案用完就刪
+                d.delete()
+
+
+def run_pending():
+    """電腦用：交掉雲端留下來的 (relay = pc、還在 queued、一週內的)。一個都沒有就安靜結束。"""
+    user = cloud_push.connect()
+    cutoff = datetime.now(TZ) - timedelta(days=7)
+    for snap in user.collection("submit").where("relay", "==", "pc").stream():
+        d = snap.to_dict() or {}
+        if d.get("state") != "queued":
+            continue
+        try:
+            if datetime.fromisoformat(d.get("created") or d.get("at") or "") < cutoff:
+                continue
+        except ValueError:
+            pass
+        snap.reference.set({"relay": "pc-running"}, merge=True)   # 電腦接手了 (下一輪排程不會再撿)
+        try:
+            run(snap.id, user)
+        except Exception as e:  # noqa: BLE001
+            print(f"submit/{snap.id} 失敗：{e!r}"[:300])
 
 
 def main():
@@ -230,9 +275,21 @@ def main():
     except Exception:
         pass
     ap = argparse.ArgumentParser(description="代交 e學苑作業 (app 送來的)")
-    ap.add_argument("--id", required=True, help="submit 文件 id")
+    ap.add_argument("--id", help="submit 文件 id")
+    ap.add_argument("--pending", action="store_true", help="電腦用：交掉雲端連不到 e學苑、留給電腦的作業")
     a = ap.parse_args()
-    run(a.id)
+    cfg = HERE / "config.ini"                       # 電腦：Firebase 金鑰和 uid 在 config.ini 的 [cloud]；雲端用環境變數
+    if not os.environ.get("FIREBASE_SA") and cfg.exists():
+        cp = configparser.ConfigParser()
+        cp.read(cfg, encoding="utf-8-sig")
+        if cp.has_section("cloud"):
+            cloud_push.use_config(str(cfg))
+    if a.pending:
+        run_pending()
+    elif a.id:
+        run(a.id)
+    else:
+        ap.error("要給 --id 或 --pending")
 
 
 if __name__ == "__main__":

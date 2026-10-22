@@ -140,6 +140,15 @@ try {
             Write-Host ("移除舊排程 {0}" -f $old) -ForegroundColor DarkGray
         }
     }
+    # 完整安裝：雲端 (GitHub，機器在國外) 連不到 e學苑 時，app 送來的代交作業由這台電腦接手 (每 3 分鐘看一次，沒事就馬上結束)
+    $submit = Join-Path $here 'submit.py'
+    if ((Test-Path $submit) -and (Test-Path $push)) {
+        $relay = 'BetterElearning Submit Relay'
+        Register-ScheduledTask -TaskName $relay -Settings $settings -Force -ErrorAction Stop `
+            -Action (New-ScheduledTaskAction -Execute $exe -WorkingDirectory $here -Argument ('"{0}" --pending' -f $submit)) `
+            -Trigger @((New-EveryTrigger 3)) | Out-Null
+        Write-Host ("[OK] {0}  (每 3 分鐘：雲端連不到 e學苑 時代交作業)" -f $relay) -ForegroundColor Green
+    }
 } catch {
     Write-Host ("[失敗] {0} -- {1}" -f $name, $_.Exception.Message) -ForegroundColor Red
     Write-Host '用內建的 schtasks 再試一次 (整行複製貼上):' -ForegroundColor Cyan
