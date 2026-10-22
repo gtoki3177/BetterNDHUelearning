@@ -125,6 +125,7 @@ def build_data(L, prev, cfg):
             "url": a.get("url"), "submitted": bool(a.get("submitted")),
             "submission": a.get("submission"), "grading": a.get("grading"),
             "description": a.get("description") or "",
+            **({"accept": a["accept"]} if a.get("accept") else {}),   # 上傳限制 (副檔名、檔案數、大小)
             # 附件：雲端只有檔名和網址；電腦端下載過的帶本機路徑 (雲端重組時沿用上一版的)
             "attachments": [{**x, **({"local": x.get("local") or old_att[x["url"]]} if x.get("local") or x.get("url") in old_att else {})}
                             for x in (a.get("attachments") or []) if x.get("url")],

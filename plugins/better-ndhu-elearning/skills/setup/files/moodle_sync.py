@@ -470,6 +470,22 @@ def parse_course_page(html, base):
     return activities
 
 
+def parse_accept(html):
+    """繳交頁 (action=editsubmission) 的上傳限制：接受的副檔名、最多幾個檔案、每個檔案多大。
+    不是用上傳檔案繳交的 (線上文字) 回 {"files": False}；找不到繳交表單 (關閉了) 回 None。"""
+    if 'value="savesubmission"' not in html:
+        return None
+    if "id_files_filemanager" not in html:
+        return {"files": False}
+    acc = re.search(r'"target":"id_files_filemanager","accepted_types":\[([^\]]*)\]', html)
+    maxfiles = re.search(r'"maxfiles":"?(-?\d+)"?,"client_id"', html)
+    maxbytes = re.search(r'"maxbytes":"?(\d+)"?,"maxfiles"', html)
+    types = [t.strip().strip('"').replace(r"\/", "/").lower() for t in acc.group(1).split(",")] if acc and acc.group(1).strip() else []
+    return {"types": [t for t in types if t.startswith(".")] if types and not any(t in ("*", "") for t in types) else [],
+            "maxfiles": int(maxfiles.group(1)) if maxfiles else -1,
+            "maxbytes": int(maxbytes.group(1)) if maxbytes else 0}
+
+
 def parse_assign_page(html):
     """從作業頁抽出 到期日 / 繳交狀態 / 評分狀態。"""
     soup = BeautifulSoup(html, "html.parser")
@@ -697,6 +713,8 @@ def run(mode="heavy"):
     prev_local = {a.get("url"): a["local"] for c in prev.get("courses", [])
                   for a in c.get("activities", []) if a.get("local")}
     prev_materials = {c.get("id"): c.get("materials", 0) for c in prev.get("courses", [])}
+    # 作業的上傳限制 (副檔名…) 很少變：讀過一次就沿用，不用每次都多開一頁
+    prev_accept = {a.get("url"): a["accept"] for a in prev.get("assignments", []) if a.get("accept")}
     snapshot = {
         "generated_at": started.isoformat(timespec="seconds"),
         "semester": None,
@@ -877,6 +895,17 @@ def run(mode="heavy"):
                     pass
             done = (info.get("submission") or "")
             rec["submitted"] = bool(re.search(r"已(繳交|送出)|Submitted", done))
+            # 上傳限制：還能交的作業才看 (app 選檔案時先擋掉格式不對的，不用排隊半天才被 e學苑退回)
+            if a["url"] in prev_accept:
+                rec["accept"] = prev_accept[a["url"]]
+            elif rec.get("days_left") is None or rec["days_left"] > -1:
+                try:
+                    cmid = re.search(r"[?&]id=(\d+)", a["url"])
+                    acc = parse_accept(mo.get(f"/mod/assign/view.php?id={cmid.group(1)}&action=editsubmission").text) if cmid else None
+                    if acc:
+                        rec["accept"] = acc
+                except Exception:
+                    pass
             # 作業說明的附件 (spec PDF 之類)：記下檔名和網址，app 的作業詳情列得出來
             att_urls = list(dict.fromkeys(u for u in find_pluginfiles(ah)
                                           if "mod_assign/intro" in u or "mod_assign/introattachment" in u))
