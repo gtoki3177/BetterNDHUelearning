@@ -186,7 +186,7 @@ def build_mail(M, prev, cfg, summaries):
         if not m.get("unread"):
             r["read"] = True
         src = {**old.get(r["uid"], {}), **summaries.get(r["uid"], {})}
-        for k in ("summary", "action", "flash"):
+        for k in ("summary", "action", "flash", "level"):
             if src.get(k):
                 r[k] = src[k]
         msgs.append(r)
