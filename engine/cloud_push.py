@@ -162,9 +162,13 @@ def build_data(L, prev, cfg):
     if L.get("last_run_failed"):
         errors.insert(0, f"Moodle 同步在 {L['last_run_failed']} 失敗，資料可能是舊的")
 
+    # 老師貼在課程頁的文字 (mod/label)：不進任務，摘要排程會看要不要加成備忘
+    notices = [{"course": n.get("course"), "code": n.get("course_code"), "id": str(n.get("id")), "url": n.get("url"),
+                "section": n.get("section") or "", "text": (n.get("text") or "")[:1200], "links": n.get("links") or [],
+                "first_seen": tz(n.get("first_seen"))} for n in L.get("notices", []) if n.get("id")]
     return {"generated_at": gen, "semester": L.get("semester") or prev.get("semester", ""),
             "root": prev.get("root", ""),
-            "assignments": assignments, "courses": courses, "index": index, "errors": errors}
+            "assignments": assignments, "notices": notices, "courses": courses, "index": index, "errors": errors}
 
 
 def mail_record(m):

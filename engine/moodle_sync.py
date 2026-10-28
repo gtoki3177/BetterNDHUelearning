@@ -497,6 +497,38 @@ def parse_course_page(html, base):
     return activities
 
 
+def parse_course_labels(html, base):
+    """課程頁上老師直接貼的文字 (Moodle 的「文字和媒體區」mod/label)：沒有連結，parse_course_page 抓不到。
+    回傳 [{id, url, section, text, links}]；太短的 (分隔線、只有圖片) 不要。"""
+    soup = BeautifulSoup(html, "html.parser")
+    out = []
+    for li in soup.select("li.activity.modtype_label, li.modtype_label"):
+        m = re.search(r"module-(\d+)", li.get("id") or "")
+        if not m:
+            continue
+        box = li.select_one(".activity-altcontent, .contentwithoutlink, .description, .no-overflow") or li
+        for junk in box.select("script, style, .actions, .accesshide, .sr-only"):
+            junk.decompose()
+        text = re.sub(r"[ \t\u00a0]+", " ", box.get_text("\n", strip=True))
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        if len(text) < 8:
+            continue
+        sec = ""
+        parent = li.find_parent(["li", "div"], class_=re.compile(r"(course-)?section"))
+        if parent:
+            h = parent.select_one(".sectionname, h3.sectionname, .section-title, h3")
+            if h:
+                sec = re.sub(r"\s+", " ", h.get_text(" ", strip=True))[:80]
+        links = []
+        for a in box.select("a[href]"):
+            href = a["href"]
+            if href.startswith("http") and href not in [x["u"] for x in links]:
+                links.append({"t": re.sub(r"\s+", " ", a.get_text(" ", strip=True))[:60], "u": href})
+        out.append({"id": m.group(1), "url": f"{base}/mod/label/view.php?id={m.group(1)}", "section": sec,
+                    "text": text[:1500], "links": links[:8]})
+    return out
+
+
 def parse_accept(html):
     """繳交頁 (action=editsubmission) 的上傳限制：接受的副檔名、最多幾個檔案、每個檔案多大。
     不是用上傳檔案繳交的 (線上文字) 回 {"files": False}；找不到繳交表單 (關閉了) 回 None。"""
@@ -741,11 +773,13 @@ def run(mode="heavy"):
     prev_materials = {c.get("id"): c.get("materials", 0) for c in prev.get("courses", [])}
     # 作業的上傳限制 (副檔名…) 很少變：讀過一次就沿用，不用每次都多開一頁
     prev_accept = {a.get("url"): a["accept"] for a in prev.get("assignments", []) if a.get("accept")}
+    prev_notice = {n.get("id"): n.get("first_seen") for n in prev.get("notices", []) if n.get("id")}   # 第一次看到的時間沿用
     snapshot = {
         "generated_at": started.isoformat(timespec="seconds"),
         "semester": None,
         "courses": [],
         "assignments": [],
+        "notices": [],          # 老師貼在課程頁的文字 (mod/label)：不進任務，給摘要排程看要不要加成備忘
         "events": [],
         "new_files": [],
         "errors": [],
@@ -894,6 +928,9 @@ def run(mode="heavy"):
             continue
 
         acts = parse_course_page(html, base)
+        for lb in parse_course_labels(html, base):
+            snapshot["notices"].append({"course": folder, "course_code": code, **lb,
+                                        "first_seen": prev_notice.get(lb["id"]) or started.isoformat(timespec="seconds")})
         for a in acts:
             entry["counts"][a["type"]] = entry["counts"].get(a["type"], 0) + 1
         entry["activities"] = [
