@@ -132,7 +132,15 @@ jobs:
         env:
           MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
           MOODLE_COOKIE_FILE: moodle_cookies.json
-        run: python moodle_sync.py --light
+        # 學校擋國外連線時 (GitHub 的機器在國外) 連 e學苑會逾時：不算這次同步失敗 (不然每小時都紅一次)，改成警告；
+        # status_moodle.json 還是記著「沒成功」推上雲端，電腦端看到會接手同步。帳密錯之類的其他錯誤照樣失敗。
+        run: |
+          python moodle_sync.py --light && exit 0
+          if grep -qE "ConnectTimeout|ConnectionError|Max retries exceeded|timed out|Connection refused|Network is unreachable" log.txt 2>/dev/null; then
+            echo "::warning title=e學苑連不上::學校擋了國外的連線 (GitHub 的機器在國外)，這次 e學苑交給電腦代為同步；信箱照常。"
+            exit 0
+          fi
+          exit 1
 
       - name: Mail sync
         if: always() && inputs.mail_month == '' && inputs.submit_id == ''
