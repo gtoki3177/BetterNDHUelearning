@@ -52,7 +52,7 @@ Android app、網頁版 betterel.web.app  ▼  登入後讀你自己的資料，
    1. 檢查工具，登入 GitHub 和 Firebase。
    2. 問學號、系所、要不要同步信箱、登入 app 用的 email。
    3. 建你自己的 Firebase 專案和資料庫。
-   4. 請你在 Firebase 網頁上點兩個地方：開一個登入帳號、下載金鑰。腳本會印出網址等你。
+   4. 請你在 Firebase 網頁上點兩個地方：開一個登入帳號、下載金鑰。腳本會印出網址等你。帳號開好後腳本會自動關掉「允許註冊」，只有你建的帳號能登入。
    5. 建你自己的私有同步 repo `betterel-sync`，請你輸入 e學苑密碼（和信箱的應用程式密碼）。密碼直接交給 GitHub 加密保存，不會寫進任何檔案。
    6. 跑第一次同步，產生你的專屬連結和 QR code。
    7. （Windows）問要不要把講義下載到這台電腦。
@@ -141,6 +141,12 @@ python install.py --uninstall
 | 作業、課程、最近 14 天的信 | 你自己的 Firebase | 只有你的登入帳號 |
 | Firebase 金鑰 `firebase-sa.json` | `~/BetterElearning/`、你的同步 repo secrets | 不要傳給任何人 |
 | 信件摘要 | 需注意的信的寄件者、主旨、內文前 1500 字會送到你選的模型 | 你選的服務商（本地模型則不離開你電腦） |
+| 「立即同步」的 GitHub token | 你的 Firebase（app 設定頁填的） | 只有你的登入帳號；權限只有 `betterel-sync` 這個 repo 的 Actions，一年後到期 |
+| 這台裝置上的快取 | app / 瀏覽器裡（上次同步的資料，離線也能看） | 登出時會清掉 |
+
+網頁版 [betterel.web.app](https://betterel.web.app) 和 app 的畫面由這個專案的作者發佈：你貼的 Firebase 設定 (`apiKey`、`projectId`…) 本來就是公開的識別資料，不是密碼，資料靠「要登入你的帳號」和資料庫規則（每個帳號只能讀寫自己的）保護。網頁只准連 Firebase 和 GitHub API，不准連其他網站。
+
+**不要把這些東西貼給任何人（包括作者或 AI）**：e學苑密碼、信箱應用程式密碼、`firebase-sa.json`、GitHub token、登入 app 的密碼。
 
 ## 常見問題
 

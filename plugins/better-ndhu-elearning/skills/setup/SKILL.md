@@ -36,7 +36,7 @@ description: 安裝 BetterNDHUelearning：完整安裝（手機 app + 電腦網�
    python "<本技能資料夾>\files\install_full.py"
    ```
 
-   腳本會自己問學號、系所、要不要同步信箱，帶他登入 GitHub / Firebase、建專案、建私有 repo、讓他自己輸入密碼、跑第一次同步、打開他專屬的 QR code；Windows 的話最後會問要不要把講義下載到電腦（預設要：選資料夾、輸入一次 e學苑密碼存在這台電腦、註冊每天下載的排程、當場下載一次）。中途要去 Firebase 網頁點兩個地方（開帳號、下載金鑰），腳本會印出網址等他。進度存在 `~/BetterElearning/install-state.json`，中斷了重跑就會接著做。
+   腳本會自己問學號、系所、要不要同步信箱，帶他登入 GitHub / Firebase、建專案、建私有 repo、讓他自己輸入密碼、跑第一次同步、打開他專屬的 QR code；Windows 的話最後會問要不要把講義下載到電腦（預設要：選資料夾、輸入一次 e學苑密碼存在這台電腦、註冊每天下載的排程、當場下載一次）。中途要去 Firebase 網頁點兩個地方（開帳號、下載金鑰），腳本會印出網址等他；之後腳本用金鑰自動關掉 Firebase 的「允許註冊」(失敗會印出手動關的位置，不影響使用)。進度存在 `~/BetterElearning/install-state.json`，中斷了重跑就會接著做。
 
 3. 你只在他貼錯誤訊息過來時幫忙。常見狀況：
    - **Firebase 自動建專案失敗**：第一次用 Firebase 的帳號要先在 https://console.firebase.google.com 建一個專案（同意條款），腳本會問專案 ID。

@@ -324,6 +324,34 @@ def firebase_console(st):
         say(f"  金鑰放在 {sa}")
 
 
+def lock_signup(st):
+    """帳號建好後關掉「允許註冊」：網頁版的 Firebase 設定是公開的，不關的話誰都能在這個專案註冊帳號 (看不到你的資料，但能塞垃圾)。
+    順便開「電子郵件列舉保護」(登入失敗不會透露這個 email 有沒有帳號)。之後要加帳號一樣從 Firebase 主控台的 Users 新增。"""
+    if st.get("signup_locked"):
+        return
+    try:
+        try:
+            import firebase_admin  # noqa: F401  (google-auth 跟著它裝)
+        except ImportError:
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "firebase-admin"], check=False)
+        from google.auth.transport.requests import AuthorizedSession
+        from google.oauth2 import service_account
+        cred = service_account.Credentials.from_service_account_file(
+            str(WORK / "firebase-sa.json"), scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        r = AuthorizedSession(cred).patch(
+            f"https://identitytoolkit.googleapis.com/admin/v2/projects/{st['project']}/config",
+            params={"updateMask": "client.permissions.disabledUserSignup,emailPrivacyConfig.enableImprovedEmailPrivacy"},
+            json={"client": {"permissions": {"disabledUserSignup": True}}, "emailPrivacyConfig": {"enableImprovedEmailPrivacy": True}},
+            timeout=30)
+        r.raise_for_status()
+        st["signup_locked"] = True
+        save_state(st)
+        say("  已關掉「允許註冊」：只有你在主控台建的帳號能登入。")
+    except Exception as e:  # noqa: BLE001
+        say(f"  沒辦法自動關掉註冊（{e}）。請自己到 {CONSOLE.format(p=st['project'])}/authentication/settings")
+        say("  →「使用者動作」取消勾選「啟用建立 (註冊)」→ 儲存。不關也能用，只是誰都能在你的專案註冊帳號。")
+
+
 def update_caller(repo):
     """同步 repo 裡的 sync.yml 跟範本不一樣 (例如舊版的 secrets: inherit，別的帳號用會傳不到密碼) 就換成新的。回傳有沒有更新。"""
     import base64
@@ -732,6 +760,7 @@ def main():
         ask_profile(st)
         firebase_project(st)
         firebase_console(st)
+        lock_signup(st)
         github_repo(st)
         if not st.get("synced") or yes("\n  要再跑一次同步測試嗎？", False):
             first_sync(st)
