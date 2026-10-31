@@ -412,6 +412,15 @@ def cmd_push(user, d, source, save_state):
     print(json.dumps(out, ensure_ascii=False))
 
 
+def cmd_status(user, d, source):
+    """只把這次 e學苑 / 信箱的結果 (status_*.json) 推上 settings.engines.<source>，不動資料、不更新 at。
+    同步途中某一步先失敗時用：app 按了「立即同步」在等的話馬上就知道，不用等後面的步驟跑完。"""
+    status = {k: v for k in ("moodle", "mail") if (v := read_json(d / f"status_{k}.json"))}
+    if status:
+        user.collection("dash").document("settings").set({"engines": {source: status}}, merge=True)
+    print(json.dumps({"status": sorted(status)}, ensure_ascii=False))
+
+
 def cmd_archive(user, d, month):
     M = read_json(d / "mail_month.json")
     if not M or M.get("month") != month:
@@ -432,7 +441,7 @@ def main():
     except Exception:
         pass
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["pull", "push", "overlay", "archive"])
+    ap.add_argument("cmd", choices=["pull", "push", "status", "overlay", "archive"])
     ap.add_argument("--month", help="archive：哪個月 (YYYY-MM)，讀 mail_month.json 寫進 dash/mail_YYYY-MM")
     ap.add_argument("--dir", default=".")
     ap.add_argument("--source", default="actions", help="actions / pc：寫進 settings.engines 的名字")
@@ -457,6 +466,8 @@ def main():
         cmd_pull(user, d)
     elif a.cmd == "archive":
         cmd_archive(user, d, a.month)
+    elif a.cmd == "status":
+        cmd_status(user, d, a.source)
     else:
         cmd_push(user, d, a.source, not a.no_state)
 

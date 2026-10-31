@@ -297,6 +297,11 @@ def meta_set(con, k, v):
 # Moodle client
 # --------------------------------------------------------------------------
 
+# 連線 (TCP) 逾時：學校擋國外連線時 (雲端同步的機器在國外) 封包直接被丟掉，以前要等滿 45 秒、還試兩次；
+# 連得上的話 1 秒內就連上了，8 秒還連不上就當作連不上，app 那邊的「同步中」不用乾等
+CONNECT_TIMEOUT = 8
+
+
 class Moodle:
     def __init__(self, base, username, password, delay=0.6):
         self.base = base.rstrip("/")
@@ -316,7 +321,7 @@ class Moodle:
         self._sleep()
         if url.startswith("/"):
             url = self.base + url
-        return self.s.get(url, timeout=45, **kw)
+        return self.s.get(url, timeout=(CONNECT_TIMEOUT, 45), **kw)
 
     # ---- session 沿用 (雲端版加的): 設了 MOODLE_COOKIE_FILE 就先試上次的 cookie, 失效才重新登入 ----
     def _cookie_path(self):
@@ -331,6 +336,8 @@ class Moodle:
             for c in json.loads(p.read_text(encoding="utf-8")):
                 self.s.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path") or "/")
             r = self.get("/my/")
+        except requests.exceptions.ConnectionError:
+            raise                     # 連不上 e學苑：重新登入也一樣連不上，直接失敗
         except Exception:
             return False
         if "/login/" in r.url:
@@ -363,7 +370,7 @@ class Moodle:
             data={"username": self.username,
                   "password": self._password,
                   "logintoken": token},
-            timeout=45, allow_redirects=True,
+            timeout=(CONNECT_TIMEOUT, 45), allow_redirects=True,
         )
         self._password = None  # 用完就丟
         if "notloggedin" in r.text and "logintoken" in r.text:
@@ -384,7 +391,7 @@ class Moodle:
             f"{self.base}/lib/ajax/service.php",
             params={"sesskey": self.sesskey, "info": method},
             json=[{"index": 0, "methodname": method, "args": args}],
-            timeout=45,
+            timeout=(CONNECT_TIMEOUT, 45),
         )
         payload = r.json()[0]
         if payload.get("error"):
@@ -856,7 +863,7 @@ def run(mode="heavy"):
             return False
         try:
             dest_dir.mkdir(parents=True, exist_ok=True)
-            with mo.s.get(url, stream=True, timeout=120) as resp:
+            with mo.s.get(url, stream=True, timeout=(CONNECT_TIMEOUT, 120)) as resp:
                 resp.raise_for_status()
                 clen = int(resp.headers.get("content-length") or 0)
                 if clen and clen > max_mb * 1024 * 1024:
