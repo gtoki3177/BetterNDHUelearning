@@ -540,6 +540,14 @@ def expand_types(tokens):
     return sorted(out)
 
 
+def page_types(html):
+    """繳交頁上 e學苑自己列的「可接受的檔案類型」(文件檔案 .doc .docx …)：有列就以它為準，
+    沒列 (例如什麼都收) 回 []，再用 accepted_types + FILE_GROUPS 自己展開。"""
+    m = re.search(r'class="form-filetypes-descriptions[^"]*">(.*?)</div>', html, re.S)
+    small = " ".join(re.findall(r"<small[^>]*>(.*?)</small>", m.group(1), re.S)) if m else ""
+    return sorted(set(re.findall(r"\.[a-z0-9]+", small.lower())))
+
+
 def parse_accept(html):
     """繳交頁 (action=editsubmission) 的上傳限制：接受的副檔名、最多幾個檔案、每個檔案多大。
     不是用上傳檔案繳交的 (線上文字) 回 {"files": False}；找不到繳交表單 (關閉了) 回 None。"""
@@ -550,7 +558,7 @@ def parse_accept(html):
     acc = re.search(r'"target":"id_files_filemanager","accepted_types":\[([^\]]*)\]', html)
     maxfiles = re.search(r'"maxfiles":"?(-?\d+)"?,"client_id"', html)
     maxbytes = re.search(r'"maxbytes":"?(\d+)"?,"maxfiles"', html)
-    return {"types": expand_types(acc.group(1).split(",")) if acc and acc.group(1).strip() else [],
+    return {"types": page_types(html) or (expand_types(acc.group(1).split(",")) if acc and acc.group(1).strip() else []),
             "maxfiles": int(maxfiles.group(1)) if maxfiles else -1,
             "maxbytes": int(maxbytes.group(1)) if maxbytes else 0,
             "v": ACCEPT_V}

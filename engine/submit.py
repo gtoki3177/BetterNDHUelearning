@@ -209,7 +209,8 @@ def run(sid, user=None):
         form = submission_form(page.text)
         if not form["repo_id"] or not form["ctx_id"]:
             raise SubmitError("e學苑的上傳設定讀不到 (頁面可能改版了)")
-        types = ms.expand_types(form["accepted"]) if form["accepted"] else []   # 分類 (document…) 換成副檔名；[] = 不擋
+        # 頁面上列的副檔名優先，沒列再把分類 (document…) 換成副檔名；[] = 不擋
+        types = ms.page_types(page.text) or (ms.expand_types(form["accepted"]) if form["accepted"] else [])
         if types:
             bad = [f["name"] for f in files if not f["name"].lower().endswith(tuple(types))]
             if bad:
