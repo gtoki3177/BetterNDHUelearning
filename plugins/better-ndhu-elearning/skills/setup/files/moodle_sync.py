@@ -502,20 +502,58 @@ def parse_course_labels(html, base):
     return out
 
 
+# 老師設接受的檔案類型時，常常選的是 Moodle 的分類 (例如「文件」= document)，不是一個個副檔名：
+# 分類 → 副檔名，抄自 Moodle 4.1 的 lib/classes/filetypes.php
+FILE_GROUPS = {
+    "archive": ".7z .bdoc .cdoc .ddoc .gtar .gz .gzip .hqx .rar .sit .tar .tgz .zip",
+    "audio": ".aac .aif .aifc .aiff .au .flac .m3u .m4a .mp3 .oga .ogg .ra .ram .rm .wav .wma",
+    "document": ".doc .docx .epub .gdoc .odt .oth .ott .pdf .rtf",
+    "html_audio": ".aac .flac .m4a .mp3 .oga .ogg .wav",
+    "html_track": ".vtt",
+    "html_video": ".fmp4 .m4v .mov .mp4 .ogv .webm",
+    "image": ".ai .bmp .gdraw .gif .ico .jpe .jpeg .jpg .pct .pic .pict .png .svg .svgz .tif .tiff",
+    "media_source": ".m3u8 .mpd",
+    "optimised_image": ".gif .jpe .jpeg .jpg .png",
+    "presentation": ".gslides .odp .otp .potm .potx .ppam .pps .ppsm .ppsx .ppt .pptm .pptx .pub .sti .sxi",
+    "spreadsheet": ".csv .gsheet .ods .ots .xls .xlsm .xlsx",
+    "video": ".3gp .asf .avi .dif .dv .f4v .flv .fmp4 .m4v .mov .movie .mp4 .mpe .mpeg .mpg .ogv .qt .rmvb .rv .ts .webm .wmv",
+    "web_audio": ".aac .flac .m4a .mp3 .oga .ogg .ra .wav",
+    "web_file": ".css .htm .html .js .scss .xhtml",
+    "web_image": ".gif .jpe .jpeg .jpg .png .svg .svgz",
+    "web_video": ".avi .f4v .flv .fmp4 .m4v .mov .mp4 .mpe .mpeg .mpg .ogv .qt .ts .webm",
+}
+ACCEPT_V = 2          # accept 的格式版本：舊版把分類當成副檔名丟掉了 (變成不擋)，換版後重新讀一次
+
+
+def expand_types(tokens):
+    """e學苑設定的接受類型 (副檔名、分類名、*) → 副檔名清單 (排序過)。
+    有 * / 空白 / 看不懂的 (例如 MIME 類型) 回 []，代表不擋，交給 e學苑自己判斷。"""
+    out = set()
+    for t in tokens:
+        t = t.strip().strip('"').replace("\\/", "/").lower()
+        if t.startswith(".") and len(t) > 1:
+            out.add(t)
+        elif t in FILE_GROUPS:
+            out.update(FILE_GROUPS[t].split())
+        else:
+            return []
+    return sorted(out)
+
+
 def parse_accept(html):
     """繳交頁 (action=editsubmission) 的上傳限制：接受的副檔名、最多幾個檔案、每個檔案多大。
     不是用上傳檔案繳交的 (線上文字) 回 {"files": False}；找不到繳交表單 (關閉了) 回 None。"""
     if 'value="savesubmission"' not in html:
         return None
     if "id_files_filemanager" not in html:
-        return {"files": False}
+        return {"files": False, "v": ACCEPT_V}
     acc = re.search(r'"target":"id_files_filemanager","accepted_types":\[([^\]]*)\]', html)
     maxfiles = re.search(r'"maxfiles":"?(-?\d+)"?,"client_id"', html)
     maxbytes = re.search(r'"maxbytes":"?(\d+)"?,"maxfiles"', html)
-    types = [t.strip().strip('"').replace(r"\/", "/").lower() for t in acc.group(1).split(",")] if acc and acc.group(1).strip() else []
-    return {"types": [t for t in types if t.startswith(".")] if types and not any(t in ("*", "") for t in types) else [],
+    return {"types": expand_types(acc.group(1).split(",")) if acc and acc.group(1).strip() else [],
             "maxfiles": int(maxfiles.group(1)) if maxfiles else -1,
-            "maxbytes": int(maxbytes.group(1)) if maxbytes else 0}
+            "maxbytes": int(maxbytes.group(1)) if maxbytes else 0,
+            "v": ACCEPT_V}
 
 
 def parse_assign_page(html):
@@ -746,7 +784,7 @@ def run(mode="heavy"):
                   for a in c.get("activities", []) if a.get("local")}
     prev_materials = {c.get("id"): c.get("materials", 0) for c in prev.get("courses", [])}
     # 作業的上傳限制 (副檔名…) 很少變：讀過一次就沿用，不用每次都多開一頁
-    prev_accept = {a.get("url"): a["accept"] for a in prev.get("assignments", []) if a.get("accept")}
+    prev_accept = {a.get("url"): a["accept"] for a in prev.get("assignments", []) if (a.get("accept") or {}).get("v") == ACCEPT_V}
     prev_notice = {n.get("id"): n.get("first_seen") for n in prev.get("notices", []) if n.get("id")}   # 第一次看到的時間沿用
     snapshot = {
         "generated_at": started.isoformat(timespec="seconds"),

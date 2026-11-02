@@ -115,6 +115,10 @@ def build_data(L, prev, cfg):
     old_local = {i["url"]: i.get("local") for c in prev.get("courses", [])
                  for i in c.get("items", []) if i.get("local")}
     old_dept = {c["code"]: c.get("dept") for c in prev.get("courses", [])}
+    # 上傳限制：比較新版的讀法 (v 大的) 留著。雲端連不到 e學苑 時這裡的原始檔是舊的，電腦端 overlay 補上的新版不能被蓋回去
+    old_acc = {a["url"]: a["accept"] for a in prev.get("assignments", []) if a.get("accept")}
+    newer_acc = lambda a: max((x for x in (a.get("accept"), old_acc.get(a.get("url"))) if x),
+                              key=lambda x: x.get("v", 1), default=None)
 
     assignments = []
     for a in L.get("assignments", []):
@@ -125,7 +129,7 @@ def build_data(L, prev, cfg):
             "url": a.get("url"), "submitted": bool(a.get("submitted")),
             "submission": a.get("submission"), "grading": a.get("grading"),
             "description": a.get("description") or "",
-            **({"accept": a["accept"]} if a.get("accept") else {}),   # 上傳限制 (副檔名、檔案數、大小)
+            **({"accept": newer_acc(a)} if newer_acc(a) else {}),   # 上傳限制 (副檔名、檔案數、大小)
             # 附件：雲端只有檔名和網址；電腦端下載過的帶本機路徑 (雲端重組時沿用上一版的)
             "attachments": [{**x, **({"local": x.get("local") or old_att[x["url"]]} if x.get("local") or x.get("url") in old_att else {})}
                             for x in (a.get("attachments") or []) if x.get("url")],
@@ -326,6 +330,13 @@ def cmd_overlay(user, d, cfg_path):
             if lp and x.get("local") != lp:
                 x["local"] = lp
                 att_changed += 1
+    # 上傳限制 (副檔名…)：電腦讀到比較新版的就補上去 (雲端連不到 e學苑 時，app 選檔案前的檢查靠這個)
+    acc = {a["url"]: a["accept"] for a in L.get("assignments", []) if a.get("url") and (a.get("accept") or {}).get("v")}
+    for a in assigns:
+        x = acc.get(a.get("url"))
+        if x and x.get("v", 1) >= (a.get("accept") or {}).get("v", 1) and a.get("accept") != x:
+            a["accept"] = x
+            att_changed += 1
     changed = 0
     for c in courses:
         for it in c.get("items", []):

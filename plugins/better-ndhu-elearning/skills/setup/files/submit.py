@@ -13,6 +13,8 @@ submit/{id} 的內容 (app 寫的)：
 dry = true：只傳到 e學苑的暫存區、把暫存區的檔案下載回來比對，不按「儲存」(作業不會變)，測流程用。
 
 狀態 (state)：queued → login → uploading → saving → verifying → done / failed；失敗時 error 寫原因。
+app 等太久會自己處理 (cancelled = true 是 app 取消的，誰都不要再交)：雲端排隊太久 → 直接把 relay 設成 pc 交給電腦；
+電腦一直沒接手 (沒開機) → 取消。所以開始交之前、登入之後都要再看一次還輪不輪得到自己。
 """
 import argparse
 import base64
@@ -177,6 +179,9 @@ def run(sid, user=None):
     meta = ref.get().to_dict()
     if not meta:
         raise SystemExit(f"找不到 submit/{sid}")
+    if meta.get("cancelled") or meta.get("state") != "queued" or (ON_CLOUD and meta.get("relay")):
+        print(f"submit/{sid} 不用交了 (state={meta.get('state')}, relay={meta.get('relay')}, cancelled={meta.get('cancelled')})")
+        return                                      # app 取消了 / 已經交給電腦 / 交過了 (暫存的檔案留給接手的人)
     keep = False                                    # 留給電腦代交：暫存的檔案不能刪
     try:
         files = load_files(ref, meta)
@@ -196,15 +201,19 @@ def run(sid, user=None):
             if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
                 raise Unreachable(repr(e)[:200]) from e
             raise
+        if (ref.get().to_dict() or {}).get("cancelled"):   # 登入的時候 app 剛好等太久取消了：不要交
+            print(f"submit/{sid} 已被 app 取消")
+            return
 
         page = mo.get(f"/mod/assign/view.php?id={cmid}&action=editsubmission")
         form = submission_form(page.text)
         if not form["repo_id"] or not form["ctx_id"]:
             raise SubmitError("e學苑的上傳設定讀不到 (頁面可能改版了)")
-        if form["accepted"]:
-            bad = [f["name"] for f in files if not any(f["name"].lower().endswith(t) for t in form["accepted"] if t.startswith("."))]
-            if bad and not any(t in ("*", "") for t in form["accepted"]):
-                raise SubmitError(f"這個作業只收 {'、'.join(form['accepted'])}，{'、'.join(bad)} 不符合")
+        types = ms.expand_types(form["accepted"]) if form["accepted"] else []   # 分類 (document…) 換成副檔名；[] = 不擋
+        if types:
+            bad = [f["name"] for f in files if not f["name"].lower().endswith(tuple(types))]
+            if bad:
+                raise SubmitError(f"這個作業只收 {' '.join(types)}，{'、'.join(bad)} 不符合")
         big = [f["name"] for f in files if form["maxbytes"] and len(f["raw"]) > form["maxbytes"]]
         if big:
             raise SubmitError(f"這個作業每個檔案最大 {form['maxbytes'] // 1048576} MB，{'、'.join(big)} 太大了")
@@ -255,14 +264,14 @@ def run_pending():
     cutoff = datetime.now(TZ) - timedelta(days=7)
     for snap in user.collection("submit").where("relay", "==", "pc").stream():
         d = snap.to_dict() or {}
-        if d.get("state") != "queued":
+        if d.get("state") != "queued" or d.get("cancelled"):
             continue
         try:
             if datetime.fromisoformat(d.get("created") or d.get("at") or "") < cutoff:
                 continue
         except ValueError:
             pass
-        snap.reference.set({"relay": "pc-running"}, merge=True)   # 電腦接手了 (下一輪排程不會再撿)
+        snap.reference.set({"relay": "pc-running", "at": now_iso()}, merge=True)   # 電腦接手了 (下一輪排程不會再撿；app 從這時開始算電腦交多久)
         try:
             run(snap.id, user)
         except Exception as e:  # noqa: BLE001
