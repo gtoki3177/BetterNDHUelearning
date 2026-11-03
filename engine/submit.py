@@ -58,6 +58,15 @@ def state(ref, **kw):
     print(json.dumps({k: v for k, v in kw.items() if k != "files_result"}, ensure_ascii=False))
 
 
+def cancelled(ref, sid):
+    """app 取消了嗎 (使用者按「取消上傳」或等太久)：是的話寫回取消的狀態 (中間的 state 可能被這裡蓋過)。"""
+    if not (ref.get().to_dict() or {}).get("cancelled"):
+        return False
+    state(ref, state="failed", cancelled=True, error="已取消")
+    print(f"submit/{sid} 已被 app 取消")
+    return True
+
+
 def load_files(ref, meta):
     """把切塊存的檔案拼回來，每一塊都對過 app 算的指紋 (雲端暫存沒壞)；整個檔案的指紋之後拿來跟 e學苑上的比。"""
     out = []
@@ -201,8 +210,7 @@ def run(sid, user=None):
             if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
                 raise Unreachable(repr(e)[:200]) from e
             raise
-        if (ref.get().to_dict() or {}).get("cancelled"):   # 登入的時候 app 剛好等太久取消了：不要交
-            print(f"submit/{sid} 已被 app 取消")
+        if cancelled(ref, sid):                     # 登入的時候 app 剛好取消了 (使用者按取消 / 等太久)：不要交
             return
 
         page = mo.get(f"/mod/assign/view.php?id={cmid}&action=editsubmission")
@@ -230,6 +238,8 @@ def run(sid, user=None):
         for f in files:
             draft_upload(mo, form, f, S.get("username", ""))
 
+        if cancelled(ref, sid):                     # 檔案傳到 e學苑的暫存區了，但還沒按儲存：不存，作業不會變
+            return
         if not dry:
             state(ref, state="saving")
             r = mo.s.post(f"{mo.base}/mod/assign/view.php", data=form["fields"], timeout=90)
