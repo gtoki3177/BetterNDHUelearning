@@ -32,6 +32,10 @@ on:
         description: "代交作業 (app 送來的 submit 文件 id)；空白 = 一般同步"
         type: string
         default: ""
+      moodle:
+        description: "雲端要不要同步 e學苑：學校只開放校內連線時設 false (只同步信箱)，e學苑交給電腦經 VPN 同步"
+        type: boolean
+        default: true
     secrets:
       MOODLE_USERNAME:
         required: false
@@ -126,8 +130,16 @@ jobs:
           SUBMIT_ID: ${{ inputs.submit_id }}
         run: python submit.py --id "$SUBMIT_ID"
 
+      - name: Moodle skipped
+        # moodle: false：不登入 e學苑。照樣記一筆「雲端沒同步 e學苑」(ok = false)，電腦端看到才會接手同步作業並推上雲端
+        if: inputs.mail_month == '' && inputs.submit_id == '' && !inputs.moodle
+        working-directory: src/engine
+        run: |
+          python3 -c "import json,datetime as d;t=d.datetime.now().astimezone().isoformat(timespec='seconds');json.dump({'ok':False,'skipped':True,'mode':'off','started_at':t,'finished_at':t,'error':'雲端不同步 e學苑：學校只開放校內連線，改由電腦經 VPN 同步'},open('status_moodle.json','w',encoding='utf-8'),ensure_ascii=False)"
+          echo "雲端不同步 e學苑 (moodle: false)，只同步信箱"
+
       - name: Moodle light sync
-        if: inputs.mail_month == '' && inputs.submit_id == ''
+        if: inputs.mail_month == '' && inputs.submit_id == '' && inputs.moodle
         working-directory: src/engine
         env:
           MOODLE_PASSWORD: ${{ secrets.MOODLE_PASSWORD }}
